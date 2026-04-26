@@ -86,12 +86,12 @@ export default function LandingPage() {
       {/* 히어로 섹션 */}
       <section className="pt-24 pb-20 px-6 text-center">
         <div className="max-w-3xl mx-auto">
-          <h1 className="text-5xl md:text-6xl font-black leading-tight tracking-tight text-gray-900 mb-6">
+          <h1 className="text-3xl sm:text-5xl md:text-6xl font-black leading-snug tracking-tight text-gray-900 mb-6">
             누적 <span className="text-blue-600">400억</span> 매출의 법칙,<br />
             당신의 상세페이지에<br />
             이식하세요.
           </h1>
-          <p className="text-lg text-gray-500 mb-10 leading-relaxed">
+          <p className="text-base sm:text-lg text-gray-500 mb-10 leading-relaxed">
             1,000개 프로젝트를 성공시킨 와디즈 PD 출신<br />
             독보적인 &apos;성공 DNA&apos;를 이 도구에 모두 담았습니다.
           </p>
@@ -148,7 +148,7 @@ export default function LandingPage() {
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
             <div className="text-blue-600 text-xs font-bold tracking-widest uppercase mb-3">HERO SECTION</div>
-            <h2 className="text-4xl font-black text-gray-900 mb-4">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 mb-4">
               설명만 하는 상세페이지는 이제 그만.
             </h2>
             <p className="text-gray-500">
@@ -158,8 +158,8 @@ export default function LandingPage() {
           </div>
 
           {/* 비교표 */}
-          <div className="rounded-2xl overflow-hidden border border-gray-200">
-            <div className="grid grid-cols-3">
+          <div className="rounded-2xl overflow-hidden border border-gray-200 overflow-x-auto">
+            <div className="grid grid-cols-3 min-w-[560px]">
               {/* 헤더 */}
               <div className="bg-gray-900 p-5"></div>
               <div className="bg-gray-100 p-5 text-center font-bold text-gray-700 text-sm border-l border-gray-200">
@@ -198,7 +198,7 @@ export default function LandingPage() {
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
             <div className="text-blue-600 text-xs font-bold tracking-widest uppercase mb-3">INTERACTIVE STORYBOARD BUILDER</div>
-            <h2 className="text-4xl font-black text-gray-900 mb-4">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 mb-4">
               팔리는 상세페이지 콘티,<br />지금 바로 만들어보세요
             </h2>
             <p className="text-gray-500">
@@ -275,7 +275,7 @@ export default function LandingPage() {
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
             <div className="text-blue-600 text-xs font-bold tracking-widest uppercase mb-3">TRACK RECORD</div>
-            <h2 className="text-4xl font-black text-gray-900 mb-2">숫자가 증명하는 성과</h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 mb-2">숫자가 증명하는 성과</h2>
             <p className="text-gray-500">7년간 쌓아온 실적, 데이터로 확인하세요</p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -297,9 +297,9 @@ export default function LandingPage() {
       {/* CTA 섹션 */}
       <section className="py-20 px-6">
         <div className="max-w-2xl mx-auto">
-          <div className="bg-blue-50 rounded-3xl p-12 text-center">
+          <div className="bg-blue-50 rounded-3xl p-8 sm:p-12 text-center">
             <div className="text-blue-600 text-xs font-bold tracking-widest uppercase mb-4">GET STARTED</div>
-            <h2 className="text-3xl font-black text-gray-900 mb-3">
+            <h2 className="text-2xl sm:text-3xl font-black text-gray-900 mb-3">
               전문가의 성공 DNA를 담은<br />팔리는 콘티, 지금 만들어보세요.
             </h2>
             <p className="text-gray-500 mb-8 text-sm">
