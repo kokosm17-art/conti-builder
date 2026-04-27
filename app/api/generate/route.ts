@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
         const encoder = new TextEncoder();
         try {
           const response = client.messages.stream({
-            model: "claude-3-5-sonnet-latest",
+            model: "claude-sonnet-4-6",
             max_tokens: 8192,
             system: [
               {
