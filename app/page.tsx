@@ -158,38 +158,60 @@ export default function LandingPage() {
           </div>
 
           {/* 비교표 */}
-          <div className="rounded-2xl overflow-hidden border border-gray-200 overflow-x-auto">
-            <div className="grid grid-cols-3 min-w-[560px]">
-              {/* 헤더 */}
-              <div className="bg-gray-900 p-5"></div>
-              <div className="bg-gray-100 p-5 text-center font-bold text-gray-700 text-sm border-l border-gray-200">
-                타 AI 서비스 / 일반 외주
-              </div>
-              <div className="bg-blue-600 p-5 text-center font-bold text-white text-sm">
-                상세페이지의 정석
-              </div>
+          {(() => {
+            const rows = [
+              { label: "기획의 깊이", bad: "단순 정보 나열형 텍스트 생성", good: "400억 매출 DNA 기반 후킹 기획" },
+              { label: "제작 방식", bad: "일관된 톤의 기계적 생성", good: "제품별 맞춤형 기획" },
+              { label: "비용 효율", bad: "수백만 원대의 높은 외주비", good: "외주 대비 1/10 수준의 합리적 가격" },
+              { label: "수정 범위", bad: "수정 횟수 3~5회 및 추가 비용 발생", good: "수정횟수 30회, 추가 비용 없음" },
+            ];
+            return (
+              <>
+                {/* 모바일: 카드 형태 */}
+                <div className="md:hidden space-y-3">
+                  {rows.map((row, i) => (
+                    <div key={i} className="rounded-xl overflow-hidden border border-gray-200">
+                      <div className="bg-gray-900 px-4 py-2.5 text-white font-bold text-sm">{row.label}</div>
+                      <div className="grid grid-cols-2">
+                        <div className="bg-gray-50 p-3 border-r border-gray-200">
+                          <div className="text-xs font-bold text-gray-400 mb-1">타 AI / 일반 외주</div>
+                          <p className="text-xs text-gray-500"><span className="text-red-400 mr-1">✕</span>{row.bad}</p>
+                        </div>
+                        <div className="bg-blue-600 p-3">
+                          <div className="text-xs font-bold text-blue-200 mb-1">상세페이지의 정석</div>
+                          <p className="text-xs text-white"><span className="mr-1">✓</span>{row.good}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-              {/* 행 */}
-              {[
-                { label: "기획의 깊이", bad: "단순 정보 나열형 텍스트 생성", good: "400억 매출 DNA 기반 후킹 기획" },
-                { label: "제작 방식", bad: "일관된 톤의 기계적 생성", good: "제품별 맞춤형 기획" },
-                { label: "비용 효율", bad: "수백만 원대의 높은 외주비", good: "외주 대비 1/10 수준의 합리적 가격" },
-                { label: "수정 범위", bad: "수정 횟수 3~5회 및 추가 비용 발생", good: "수정횟수 30회, 추가 비용 없음" },
-              ].map((row, i) => (
-                <React.Fragment key={i}>
-                  <div className="bg-gray-900 p-5 text-white font-semibold text-sm border-t border-gray-700">
-                    {row.label}
+                {/* 데스크탑: 3컬럼 표 */}
+                <div className="hidden md:block rounded-2xl overflow-hidden border border-gray-200">
+                  <div className="grid grid-cols-3">
+                    <div className="bg-gray-900 p-5"></div>
+                    <div className="bg-gray-100 p-5 text-center font-bold text-gray-700 text-sm border-l border-gray-200">
+                      타 AI 서비스 / 일반 외주
+                    </div>
+                    <div className="bg-blue-600 p-5 text-center font-bold text-white text-sm">
+                      상세페이지의 정석
+                    </div>
+                    {rows.map((row, i) => (
+                      <React.Fragment key={i}>
+                        <div className="bg-gray-900 p-5 text-white font-semibold text-sm border-t border-gray-700">{row.label}</div>
+                        <div className="bg-gray-50 p-5 text-gray-500 text-sm border-l border-t border-gray-200">
+                          <span className="text-red-400 mr-2">✕</span>{row.bad}
+                        </div>
+                        <div className="bg-blue-600 p-5 text-white text-sm border-t border-blue-500">
+                          <span className="mr-2">✓</span>{row.good}
+                        </div>
+                      </React.Fragment>
+                    ))}
                   </div>
-                  <div className="bg-gray-50 p-5 text-gray-500 text-sm border-l border-t border-gray-200">
-                    <span className="text-red-400 mr-2">✕</span>{row.bad}
-                  </div>
-                  <div className="bg-blue-600 p-5 text-white text-sm border-t border-blue-500">
-                    <span className="mr-2">✓</span>{row.good}
-                  </div>
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
+                </div>
+              </>
+            );
+          })()}
         </div>
       </section>
 
