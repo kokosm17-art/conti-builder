@@ -1,12 +1,24 @@
 import type { Metadata } from "next";
-import { Noto_Sans_KR } from "next/font/google";
+import { Noto_Sans_KR, Nanum_Gothic, Nanum_Myeongjo } from "next/font/google";
 import "./globals.css";
 import { AuthProviderClient } from "@/components/auth-provider-client";
 
 const notoSansKR = Noto_Sans_KR({
   subsets: ["latin"],
   weight: ["400", "500", "700", "900"],
-  variable: "--font-noto",
+  variable: "--font-noto-sans-kr",
+});
+
+const nanumGothic = Nanum_Gothic({
+  subsets: ["latin"],
+  weight: ["400", "700", "800"],
+  variable: "--font-nanum",
+});
+
+const nanumMyeongjo = Nanum_Myeongjo({
+  subsets: ["latin"],
+  weight: ["400", "700", "800"],
+  variable: "--font-barungothic",
 });
 
 export const metadata: Metadata = {
@@ -20,9 +32,15 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const fontVars = [
+    notoSansKR.variable,
+    nanumGothic.variable,
+    nanumMyeongjo.variable,
+  ].join(" ");
+
   return (
-    <html lang="ko" className={notoSansKR.variable}>
-      <body className="min-h-screen bg-white font-[family-name:var(--font-noto)] antialiased">
+    <html lang="ko" className={fontVars}>
+      <body className="min-h-screen bg-white font-[family-name:var(--font-noto-sans-kr)] antialiased">
         <AuthProviderClient>{children}</AuthProviderClient>
       </body>
     </html>

@@ -22,5 +22,12 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.resource.data.userId == request.auth.uid;
     }
+
+    // 후기: 로그인한 사용자면 자신의 후기 생성 가능
+    match /reviews/{reviewId} {
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid;
+      allow read: if request.auth != null;
+    }
   }
 }

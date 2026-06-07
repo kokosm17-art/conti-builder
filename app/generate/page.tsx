@@ -2,12 +2,15 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { PaymentGateModal } from "@/components/payment-gate-modal";
 import {
   getActiveSession,
   createSession,
   incrementGeneration,
   saveGeneration,
+  saveContiText,
   hashProduct,
 } from "@/lib/session";
 import { FormData } from "@/lib/types";
@@ -186,7 +189,8 @@ function SectionBlock({
 // 메인 페이지
 // ─────────────────────────────────────────────
 export default function GeneratePage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, freeTrialUsed } = useAuth();
+  const router = useRouter();
 
   const [step, setStep] = useState<number>(() => {
     if (typeof window === "undefined") return 0;
@@ -212,6 +216,7 @@ export default function GeneratePage() {
   const outputRef = useRef<HTMLDivElement>(null);
 
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showDesignPaymentGate, setShowDesignPaymentGate] = useState(false);
   const [chatInput, setChatInput] = useState("");
 
   // 폼/스텝 변경 시 sessionStorage에 저장
@@ -315,6 +320,7 @@ export default function GeneratePage() {
 
       await incrementGeneration(sid);
       if (user) await saveGeneration(user.uid, sid, form, full);
+      await saveContiText(sid, full);
       setSessionInfo(prev => prev ? { ...prev, generationCount: prev.generationCount + 1 } : prev);
     } catch (err) {
       setRawOutput("[오류] 콘티 생성 중 문제가 발생했습니다. 다시 시도해주세요.");
@@ -403,6 +409,9 @@ export default function GeneratePage() {
   if (step === 10) {
     return (
       <div className="min-h-screen bg-gray-50">
+        {showDesignPaymentGate && (
+          <PaymentGateModal onClose={() => setShowDesignPaymentGate(false)} />
+        )}
         {/* 헤더 */}
         <header className="sticky top-0 z-40 bg-white border-b border-gray-100">
           <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
@@ -514,6 +523,34 @@ export default function GeneratePage() {
               </button>
             </div>
           </div>
+
+          {/* 업셀: 디자인 자동화 */}
+          {!generating && rawOutput && (
+            <div className="mt-6 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-100 rounded-2xl p-6">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div>
+                  <div className="text-xs font-bold text-blue-600 tracking-wider uppercase mb-1">NEXT STEP</div>
+                  <p className="font-black text-gray-900 text-lg">콘티 완성! 이제 디자인까지 AI로 만드세요</p>
+                  <p className="text-sm text-gray-500 mt-1">완성된 콘티를 바탕으로 AI가 상세페이지 디자인을 자동 조립합니다.</p>
+                </div>
+                {freeTrialUsed ? (
+                  <button
+                    onClick={() => setShowDesignPaymentGate(true)}
+                    className="flex-shrink-0 bg-blue-600 text-white font-bold px-7 py-3.5 rounded-xl hover:bg-blue-700 transition-colors text-sm whitespace-nowrap"
+                  >
+                    디자인도 만들러 가기 ✦
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => router.push("/generate/tone")}
+                    className="flex-shrink-0 bg-blue-600 text-white font-bold px-7 py-3.5 rounded-xl hover:bg-blue-700 transition-colors text-sm whitespace-nowrap"
+                  >
+                    디자인도 만들러 가기 ✦
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );

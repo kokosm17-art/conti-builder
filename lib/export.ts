@@ -75,11 +75,16 @@ export async function generateDocx(rawText: string, productName: string) {
     title: `${productName} 상세페이지 콘티`,
   });
 
-  const blob = await Packer.toBlob(doc);
+  const buffer = await Packer.toBuffer(doc);
+  const blob = new Blob([new Uint8Array(buffer)], {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = `${productName}_콘티.docx`;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

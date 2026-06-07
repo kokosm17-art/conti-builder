@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import React from "react";
+import React, { useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { PaymentGateModal } from "@/components/payment-gate-modal";
 
 const DEMO_EXAMPLE = {
   brand: "에어클린 프로",
@@ -58,9 +60,21 @@ const DEMO_CONTI = [
 ];
 
 export default function LandingPage() {
+  const { user, freeTrialUsed } = useAuth();
+  const [showPaymentGate, setShowPaymentGate] = useState(false);
+
+  const isReturning = !!user && freeTrialUsed;
+
+  function handleGatedCta(e: React.MouseEvent) {
+    if (isReturning) {
+      e.preventDefault();
+      setShowPaymentGate(true);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-white">
+      {showPaymentGate && <PaymentGateModal onClose={() => setShowPaymentGate(false)} />}
       {/* 네비게이션 */}
       <header className="sticky top-0 z-50 bg-white border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
@@ -74,12 +88,22 @@ export default function LandingPage() {
             <a href="#framework" className="hover:text-gray-900 transition-colors">차별점</a>
             <a href="#stats" className="hover:text-gray-900 transition-colors">성과</a>
           </nav>
-          <Link
-            href="/login"
-            className="bg-blue-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            시작하기
-          </Link>
+          {user ? (
+            <Link
+              href="/generate"
+              onClick={isReturning ? handleGatedCta : undefined}
+              className="bg-blue-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              콘티 만들기
+            </Link>
+          ) : (
+            <Link
+              href="/login"
+              className="bg-blue-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              시작하기
+            </Link>
+          )}
         </div>
       </header>
 
@@ -103,18 +127,37 @@ export default function LandingPage() {
             * 콘티란? 상세페이지의 뼈대가 되는 기획안입니다
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link
-              href="/generate"
-              className="bg-blue-600 text-white font-bold px-8 py-4 rounded-xl hover:bg-blue-700 transition-colors text-base w-full sm:w-auto text-center"
-            >
-              지금 콘티 만들기
-            </Link>
-            <a
-              href="#framework"
-              className="border border-gray-300 text-gray-700 font-semibold px-8 py-4 rounded-xl hover:bg-gray-50 transition-colors text-base w-full sm:w-auto text-center"
-            >
-              차별점 보기
-            </a>
+            {isReturning ? (
+              <>
+                <button
+                  onClick={() => setShowPaymentGate(true)}
+                  className="bg-blue-600 text-white font-bold px-8 py-4 rounded-xl hover:bg-blue-700 transition-colors text-base w-full sm:w-auto text-center"
+                >
+                  지금 콘티 만들기
+                </button>
+                <button
+                  onClick={() => setShowPaymentGate(true)}
+                  className="border border-blue-600 text-blue-600 font-bold px-8 py-4 rounded-xl hover:bg-blue-50 transition-colors text-base w-full sm:w-auto text-center"
+                >
+                  지금 콘티+디자인 만들기
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/generate"
+                  className="bg-blue-600 text-white font-bold px-8 py-4 rounded-xl hover:bg-blue-700 transition-colors text-base w-full sm:w-auto text-center"
+                >
+                  무료 체험하기
+                </Link>
+                <a
+                  href="#framework"
+                  className="border border-gray-300 text-gray-700 font-semibold px-8 py-4 rounded-xl hover:bg-gray-50 transition-colors text-base w-full sm:w-auto text-center"
+                >
+                  차별점 보기
+                </a>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -328,18 +371,37 @@ export default function LandingPage() {
               지금 시작하면 첫 콘티 제작비 <strong>무료</strong> 혜택을 드립니다
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link
-                href="/generate"
-                className="bg-blue-600 text-white font-bold px-8 py-4 rounded-xl hover:bg-blue-700 transition-colors text-sm w-full sm:w-auto"
-              >
-                콘티 제작 시작하기 →
-              </Link>
-              <Link
-                href="/register"
-                className="border border-gray-300 text-gray-700 font-semibold px-8 py-4 rounded-xl hover:bg-white transition-colors text-sm w-full sm:w-auto"
-              >
-                무료로 시작하기
-              </Link>
+              {isReturning ? (
+                <>
+                  <button
+                    onClick={() => setShowPaymentGate(true)}
+                    className="bg-blue-600 text-white font-bold px-8 py-4 rounded-xl hover:bg-blue-700 transition-colors text-sm w-full sm:w-auto"
+                  >
+                    지금 콘티 만들기
+                  </button>
+                  <button
+                    onClick={() => setShowPaymentGate(true)}
+                    className="border border-blue-600 text-blue-600 font-semibold px-8 py-4 rounded-xl hover:bg-blue-50 transition-colors text-sm w-full sm:w-auto"
+                  >
+                    지금 콘티+디자인 만들기
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/generate"
+                    className="bg-blue-600 text-white font-bold px-8 py-4 rounded-xl hover:bg-blue-700 transition-colors text-sm w-full sm:w-auto"
+                  >
+                    콘티 제작 시작하기 →
+                  </Link>
+                  <Link
+                    href="/register"
+                    className="border border-gray-300 text-gray-700 font-semibold px-8 py-4 rounded-xl hover:bg-white transition-colors text-sm w-full sm:w-auto"
+                  >
+                    무료로 시작하기
+                  </Link>
+                </>
+              )}
             </div>
             <div className="flex items-center justify-center gap-6 mt-6 text-xs text-gray-400">
               <span>✦ 정보 작성 후 즉시 완성</span>
