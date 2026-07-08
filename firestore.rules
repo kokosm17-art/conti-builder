@@ -2,14 +2,23 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 유저 문서: 본인만 읽기/쓰기
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    // 관리자 계정 UID (kokosm17@gmail.com)
+    function isAdmin() {
+      return request.auth != null && request.auth.uid == "stWLKKMBhbTsYwrHUtE549xg16k1";
     }
 
-    // 세션: 본인 소유 문서만 읽기/쓰기/생성
+    // 유저 문서: 본인 또는 관리자(이용 현황 집계)만 읽기, 쓰기는 본인만
+    match /users/{userId} {
+      allow read: if request.auth != null
+        && (request.auth.uid == userId || isAdmin());
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // 세션: 본인 소유 문서 또는 관리자(이용 현황 집계)만 읽기, 쓰기/생성은 본인만
     match /sessions/{sessionId} {
-      allow read, update, delete: if request.auth != null
+      allow read: if request.auth != null
+        && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update, delete: if request.auth != null
         && resource.data.userId == request.auth.uid;
       allow create: if request.auth != null
         && request.resource.data.userId == request.auth.uid;
@@ -28,6 +37,15 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.resource.data.uid == request.auth.uid;
       allow read: if request.auth != null;
+    }
+
+    // CS 문의: 본인 글만 작성/조회, 답변은 관리자만 가능
+    match /inquiries/{inquiryId} {
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid;
+      allow read: if request.auth != null
+        && (resource.data.uid == request.auth.uid || isAdmin());
+      allow update: if isAdmin();
     }
   }
 }

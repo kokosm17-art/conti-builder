@@ -3,13 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { getActiveSession, saveDesignResult } from "@/lib/session";
+import { getActiveSession, saveHtmlDesign } from "@/lib/session";
 
 const STEPS = [
-  "콘티 카피 분석 중...",
-  "레이아웃 배치 결정 중...",
-  "디자인 톤 적용 중...",
-  "섹션 조립 중...",
+  "콘티 분석 중...",
+  "디자인 레이아웃 설계 중...",
+  "타이포그래피 및 컬러 적용 중...",
+  "섹션별 디자인 생성 중...",
   "마무리 중...",
 ];
 
@@ -29,8 +29,14 @@ export default function DesignGeneratePage() {
       const session = await getActiveSession(user!.uid);
       if (!session) { router.push("/generate"); return; }
 
-      // 이미 생성된 결과가 있으면 바로 미리보기로
-      if (session.designResult && session.designResult.sections.length > 0) {
+      // 이미 HTML 디자인이 있으면 바로 미리보기로
+      if (session.htmlDesign && session.htmlDesign.fullHtml) {
+        router.push(`/generate/preview-html/${session.id}`);
+        return;
+      }
+
+      // 구 방식 designResult만 있는 경우 — 구 미리보기로 (하위 호환)
+      if (session.designResult && session.designResult.sections.length > 0 && !session.htmlDesign) {
         router.push(`/generate/preview/${session.id}`);
         return;
       }
@@ -43,16 +49,16 @@ export default function DesignGeneratePage() {
       // 진행 스텝 애니메이션
       const interval = setInterval(() => {
         setStepIndex((prev) => Math.min(prev + 1, STEPS.length - 1));
-      }, 1800);
+      }, 2000);
 
       try {
-        const res = await fetch("/api/design/generate", {
+        const res = await fetch("/api/design/generate-html", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contiText: session.contiText,
-            selectedTone: session.selectedTone,
-            uploadedImageCount: Object.keys(session.assets ?? {}).length,
+            selectedTone: session.selectedTone ?? "minimal",
+            fontChoice: session.fontChoice ?? "recommended",
           }),
         });
 
@@ -64,15 +70,12 @@ export default function DesignGeneratePage() {
           return;
         }
 
-        const { sections } = await res.json();
-        await saveDesignResult(
-          session.id,
-          { sections, generatedAt: Date.now() },
-          session.designGenCount
-        );
+        const { htmlDesign } = await res.json();
 
-        if (!cancelled) router.push(`/generate/preview/${session.id}`);
-      } catch (err) {
+        await saveHtmlDesign(session.id, htmlDesign, session.designGenCount);
+
+        if (!cancelled) router.push(`/generate/preview-html/${session.id}`);
+      } catch {
         clearInterval(interval);
         if (!cancelled) setError("네트워크 오류가 발생했습니다. 다시 시도해 주세요.");
       }
@@ -110,8 +113,8 @@ export default function DesignGeneratePage() {
           <div className="absolute inset-0 flex items-center justify-center text-2xl">✦</div>
         </div>
 
-        <h1 className="text-xl font-black text-gray-900 mb-2">AI가 디자인을 조립하고 있어요</h1>
-        <p className="text-sm text-gray-500 mb-8">약 10~20초 소요됩니다. 잠시만 기다려 주세요.</p>
+        <h1 className="text-xl font-black text-gray-900 mb-2">AI가 디자인을 만들고 있어요</h1>
+        <p className="text-sm text-gray-500 mb-8">약 20~40초 소요됩니다. 잠시만 기다려 주세요.</p>
 
         {/* 진행 스텝 */}
         <div className="space-y-2">

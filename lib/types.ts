@@ -15,9 +15,11 @@ export interface FormData {
   additionalFeatures: string; // 추가 장점 및 특징
   authority: string;         // 권위 (리뷰/수상/누적판매)
   marketAwareness: "high" | "low" | ""; // 고객 인지도 수준
+  introStyle: "empathy" | "usp" | "auto" | ""; // 도입부 전략
   marketSituation: string;   // 시장 상황/트렌드
   priceInfo: string;         // 가격 정보 (시장 대비 가격 경쟁력 포함)
   toneAndManner: string;     // 톤앤매너
+  requestProductName?: boolean; // AI 제품명 추천 요청 여부
 }
 
 // Firebase Firestore 유저 문서
@@ -25,7 +27,12 @@ export interface UserDoc {
   email: string;
   freeTrialUsed: boolean;
   createdAt: number;
+  contiReviewDone?: boolean;   // 콘티 작성 후기를 이미 남겼는지 (다시 노출 안 함)
+  designReviewDone?: boolean;  // 디자인 완성 후기를 이미 남겼는지 (다시 노출 안 함)
 }
+
+// 후기 유도 팝업 구분
+export type ReviewType = "conti" | "design";
 
 // AI 디자인 생성 결과 — 섹션 단위
 export type LayoutType =
@@ -44,7 +51,7 @@ export type MotionTemplateType =
   | "box-blink"
   | null;
 
-export type TextHierarchy = "headline" | "subhead" | "body";
+export type TextHierarchy = "headline" | "subhead" | "body" | "caption";
 
 export interface DesignSection {
   id: string;
@@ -52,6 +59,9 @@ export interface DesignSection {
   imageSlotIndex: number | null;  // 이미지 슬롯 인덱스 (placeholder_N), null = 이미지 없음
   layout: LayoutType;
   textHierarchy: TextHierarchy;
+  lineHierarchies?: TextHierarchy[]; // 줄별 hierarchy (textHierarchy 오버라이드)
+  textColorOverride?: string;        // 섹션별 텍스트 색상 오버라이드 (#rrggbb 등)
+  imageAspectRatio?: string;         // 이미지 표시 비율 ("3/4"|"4/5"|"1/1"|"4/3"|"16/9"|"original")
   motionTemplate: MotionTemplateType;
   splitDirection?: "text-left" | "text-right";
   cardCount?: 2 | 3;
@@ -62,11 +72,37 @@ export interface DesignResult {
   generatedAt: number;
 }
 
+export interface HtmlDesignResult {
+  fullHtml: string;      // Claude가 생성한 전체 HTML 문서
+  sectionIds: string[];  // section-0, section-1, ... 순서 배열
+  generatedAt: number;
+}
+
 // Firebase Firestore 후기 문서
 export interface ReviewDoc {
   uid: string;
   star: number;       // 1~5
   text: string;
+  createdAt: number;
+}
+
+// CS 문의 카테고리
+export type InquiryCategory = "콘티" | "디자인" | "결제" | "기타";
+
+// CS 문의 상태
+export type InquiryStatus = "대기" | "답변완료";
+
+// Firebase Firestore CS 문의 문서
+export interface InquiryDoc {
+  uid: string;
+  email: string;            // 작성자 이메일 (관리자 화면 표시용)
+  sessionId?: string;       // 관련 세션 (선택)
+  productName?: string;     // 관련 세션의 제품명 (선택, 표시용)
+  category: InquiryCategory;
+  message: string;
+  status: InquiryStatus;
+  reply?: string;
+  repliedAt?: number;
   createdAt: number;
 }
 
@@ -85,10 +121,15 @@ export interface SessionDoc {
   contiEditCount: number;      // 콘티 수정 횟수 (최대 30회)
   designGenCount: number;      // 디자인 전체 재생성 횟수 (최대 5회)
   sectionRegenCount: number;   // 디자인 섹션 재생성 횟수 (최대 30회)
-  designEditCount: number;     // 하위 호환용 (단순 편집 — 횟수 제한 없음)
+  designEditCount: number;     // 디자인 섹션 부분 수정 횟수 (최대 30회)
 
   // 상품 B 콘티 결과 텍스트
   contiText?: string;          // AI 생성 콘티 전문 (이미지 슬롯 파싱용)
+  contiDraft?: string;         // 생성 도중 오류 발생 시 그때까지 만들어진 부분 결과 (복구용)
+
+  // 자동 임시저장 (스텝 전환 시 — 브라우저 저장소 유실 대비)
+  formDraft?: FormData;        // 작성 중인 폼 입력 스냅샷
+  formStep?: number;           // 임시저장 시점의 작성 단계
 
   // 상품 B 디자인 설정
   selectedTone?: string;       // 선택된 디자인 톤 ID
@@ -97,7 +138,8 @@ export interface SessionDoc {
   assets?: {                   // 업로드 이미지 에셋 매핑 { placeholderId: imageUrl }
     [placeholderId: string]: string;
   };
-  designResult?: DesignResult; // AI 디자인 생성 결과
+  designResult?: DesignResult; // AI 디자인 생성 결과 (구 방식 — 템플릿 기반)
+  htmlDesign?: HtmlDesignResult; // AI 디자인 생성 결과 (신 방식 — HTML/CSS)
   motionEnabled?: boolean;     // 텍스트 모션 활성화 여부
   feedbackStar?: number;       // 무료 체험 후기 별점 (1~5)
   feedbackText?: string;       // 한줄 후기

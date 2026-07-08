@@ -1,32 +1,71 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { MotionTemplateType } from "@/lib/types";
 
 interface MotionTextProps {
-  text: string;
+  text: ReactNode;
   motionTemplate: MotionTemplateType;
   accentColor: string;
   active: boolean;
+  /** 값이 바뀔 때마다 모션을 처음부터 다시 재생 (GIF 캡처용) */
+  replayKey?: number;
+  /** true이면 애니메이션 완료 후 자동으로 반복 재생 (공유 링크용) */
+  infinite?: boolean;
   className?: string;
 }
 
-export function MotionText({ text, motionTemplate, accentColor, active, className = "" }: MotionTextProps) {
+const ANIM_DURATION: Record<NonNullable<MotionTemplateType>, number> = {
+  "underline-draw": 700,
+  "marker-highlight": 800,
+  "soft-scale": 500,
+  "gradient-fill": 800,
+  "box-blink": 2000,
+};
+const LOOP_PAUSE = 1500; // 한 번 재생 후 다음 재생까지 대기 시간 (ms)
+
+export function MotionText({ text, motionTemplate, accentColor, active, replayKey = 0, infinite = false, className = "" }: MotionTextProps) {
+  // 모션은 마운트(또는 replayKey 변경) 직후 "off → on" 전환으로 재생된다.
+  const [played, setPlayed] = useState(false);
+
+  useEffect(() => {
+    if (!active || !motionTemplate) {
+      setPlayed(false);
+      return;
+    }
+    setPlayed(false);
+    const startT = setTimeout(() => setPlayed(true), 150);
+
+    if (!infinite) return () => clearTimeout(startT);
+
+    // 무한 반복: 애니메이션 재생 완료 후 LOOP_PAUSE 뒤에 리셋 → 재재생
+    const animDur = ANIM_DURATION[motionTemplate] ?? 800;
+    const loopT = setInterval(() => {
+      setPlayed(false);
+      setTimeout(() => setPlayed(true), 200);
+    }, animDur + LOOP_PAUSE);
+
+    return () => {
+      clearTimeout(startT);
+      clearInterval(loopT);
+    };
+  }, [active, motionTemplate, replayKey, infinite]);
+
   if (!motionTemplate || !active) {
     return <span className={className}>{text}</span>;
   }
 
   switch (motionTemplate) {
     case "underline-draw":
-      return <UnderlineDraw text={text} accentColor={accentColor} active={active} className={className} />;
+      return <UnderlineDraw text={text} accentColor={accentColor} active={played} className={className} />;
     case "marker-highlight":
-      return <MarkerHighlight text={text} accentColor={accentColor} active={active} className={className} />;
+      return <MarkerHighlight text={text} accentColor={accentColor} active={played} className={className} />;
     case "soft-scale":
-      return <SoftScale text={text} active={active} className={className} />;
+      return <SoftScale text={text} active={played} className={className} />;
     case "gradient-fill":
-      return <GradientFill text={text} accentColor={accentColor} active={active} className={className} />;
+      return <GradientFill text={text} accentColor={accentColor} active={played} className={className} />;
     case "box-blink":
-      return <BoxBlink text={text} accentColor={accentColor} active={active} className={className} />;
+      return <BoxBlink text={text} accentColor={accentColor} active={played} className={className} />;
     default:
       return <span className={className}>{text}</span>;
   }

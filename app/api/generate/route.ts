@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest } from "next/server";
-import { getSystemPrompt, buildUserPrompt } from "@/lib/system-prompt";
+import { getSystemPrompt, buildUserPrompt, SYSTEM_PROMPT_REVISION } from "@/lib/system-prompt";
 import { FormData } from "@/lib/types";
 import fs from "fs";
 import path from "path";
@@ -20,6 +20,26 @@ function loadKnowledge(_pageType: "wadiz" | "general"): string {
     const content = read(`conti-example-${i}.md`);
     if (content) knowledge += `## 와디즈 상세페이지 콘티 예시 ${i}\n\n` + content + "\n\n";
   }
+
+  // knowledge 폴더의 추가 .md 파일을 자동으로 읽어 주입
+  // (위에서 명시적으로 읽은 파일은 제외)
+  const fixedFiles = new Set([
+    "copy-archive.md",
+    "intro-copy-examples.md",
+    ...Array.from({ length: 5 }, (_, i) => `conti-example-${i + 1}.md`),
+  ]);
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.endsWith(".md") && !fixedFiles.has(entry.name)) {
+        const content = read(entry.name);
+        if (content) {
+          const title = entry.name.replace(/\.md$/, "").replace(/-/g, " ");
+          knowledge += `## ${title}\n\n` + content + "\n\n";
+        }
+      }
+    }
+  } catch { /* knowledge 폴더 읽기 실패 시 무시 */ }
 
   return knowledge;
 }
@@ -44,11 +64,14 @@ export async function POST(req: NextRequest) {
     }
 
     const pageType = formData.pageType ?? "wadiz";
-    const systemPrompt = getSystemPrompt(pageType) + loadKnowledge(pageType);
-
     const isRevision = !!(previousOutput && revisionRequest);
+
+    const systemPrompt = isRevision
+      ? SYSTEM_PROMPT_REVISION
+      : getSystemPrompt(pageType) + loadKnowledge(pageType);
+
     const userMessage = isRevision
-      ? `아래는 기존에 작성된 콘티입니다:\n\n${previousOutput}\n\n---\n\n위 콘티를 다음 요청에 따라 수정해 주세요:\n${revisionRequest}\n\n수정 시 전체 콘티를 다시 완성된 형태로 출력해 주세요.`
+      ? `아래는 기존에 작성된 콘티입니다:\n\n${previousOutput}\n\n---\n\n수정 요청: ${revisionRequest}`
       : buildUserPrompt(formData);
 
     const stream = new ReadableStream({

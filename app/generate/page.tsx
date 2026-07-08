@@ -8,14 +8,20 @@ import { PaymentGateModal } from "@/components/payment-gate-modal";
 import {
   getActiveSession,
   createSession,
+  startNewSession,
   incrementGeneration,
   saveGeneration,
   saveContiText,
+  saveContiDraft,
+  saveFormDraft,
   hashProduct,
 } from "@/lib/session";
 import { FormData } from "@/lib/types";
-import { parseSections } from "@/lib/format-output";
+import { parseSections, detectChangedSections, SectionChangeInfo } from "@/lib/format-output";
 import { generateDocx } from "@/lib/export";
+import { ContiSectionBlock } from "@/components/conti-section-block";
+import { useReviewGate } from "@/lib/use-review-gate";
+import { ReviewModal } from "@/components/review-modal";
 
 // ─────────────────────────────────────────────
 // 단계별 폼 데이터 기본값
@@ -33,9 +39,11 @@ const INITIAL_FORM: FormData = {
   additionalFeatures: "",
   authority: "",
   marketAwareness: "",
+  introStyle: "",
   marketSituation: "",
   priceInfo: "",
   toneAndManner: "",
+  requestProductName: false,
 };
 
 const TONE_OPTIONS = [
@@ -146,54 +154,26 @@ function PaymentModal({
 }
 
 // ─────────────────────────────────────────────
-// 섹션 블록 컴포넌트
-// ─────────────────────────────────────────────
-function SectionBlock({
-  title,
-  intent,
-  content,
-  onCopy,
-}: {
-  title: string;
-  intent: string;
-  content: string;
-  onCopy: (text: string) => void;
-}) {
-  return (
-    <div className="border border-gray-200 rounded-2xl overflow-hidden">
-      <div className="bg-gray-900 px-6 py-4 flex items-center justify-between">
-        <h3 className="text-white font-bold">{title}</h3>
-        <button
-          onClick={() => onCopy(intent + "\n\n" + content)}
-          className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded-lg px-3 py-1 transition-colors"
-        >
-          복사
-        </button>
-      </div>
-      {intent && (
-        <div className="bg-blue-50 px-6 py-4 border-b border-blue-100">
-          <div className="text-xs font-bold text-blue-600 mb-2 tracking-wider">기획 의도</div>
-          <p className="text-sm text-blue-800 whitespace-pre-line leading-relaxed">{intent}</p>
-        </div>
-      )}
-      <div className="px-6 py-6">
-        <pre className="text-sm text-gray-800 whitespace-pre-wrap leading-loose font-[family-name:var(--font-noto)]">
-          {content}
-        </pre>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────
 // 메인 페이지
 // ─────────────────────────────────────────────
 export default function GeneratePage() {
-  const { user, loading: authLoading, freeTrialUsed } = useAuth();
+  const { user, loading: authLoading, freeTrialUsed, logout } = useAuth();
   const router = useRouter();
 
+  // 홈페이지 "콘티 제작 시작하기" 등 ?new=1로 진입한 경우: 기존 작성 내용을
+  // 복구하지 않고 빈 폼으로 새로 시작한다 (기존 작성 중이던 기록은 마이페이지에 그대로 남는다)
+  const isNewSession =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("new") === "1";
+
+  // sessionStorage에 저장된 작성 내용이 있는지 (없으면 Firestore 임시저장본으로 복구 시도)
+  const [hasLocalDraft] = useState<boolean>(() => {
+    if (typeof window === "undefined" || isNewSession) return false;
+    try { return !!sessionStorage.getItem("contie_form"); } catch { return false; }
+  });
   const [step, setStep] = useState<number>(() => {
     if (typeof window === "undefined") return 0;
+    if (isNewSession) return 1;
     try {
       const saved = sessionStorage.getItem("contie_step");
       const n = saved ? Number(saved) : 0;
@@ -201,7 +181,7 @@ export default function GeneratePage() {
     } catch { return 0; }
   });
   const [form, setForm] = useState<FormData>(() => {
-    if (typeof window === "undefined") return INITIAL_FORM;
+    if (typeof window === "undefined" || isNewSession) return INITIAL_FORM;
     try {
       const saved = sessionStorage.getItem("contie_form");
       return saved ? { ...INITIAL_FORM, ...JSON.parse(saved) } : INITIAL_FORM;
@@ -209,15 +189,25 @@ export default function GeneratePage() {
   });
   const [generating, setGenerating] = useState(false);
   const [rawOutput, setRawOutput] = useState("");
-  const [, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [showPayment, setShowPayment] = useState(false);
   const [sessionInfo, setSessionInfo] = useState<{ productName: string; generationCount: number } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [changedSections, setChangedSections] = useState<Map<string, SectionChangeInfo>>(new Map());
   const outputRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLDivElement>(null);
+  const introRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
+  const conclusionRef = useRef<HTMLDivElement>(null);
+
+  const reviewGate = useReviewGate(user?.uid, "conti");
 
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showDesignPaymentGate, setShowDesignPaymentGate] = useState(false);
   const [chatInput, setChatInput] = useState("");
+  // Firestore에서 활성 세션의 복구가 끝나기 전까지는 디바운스 저장을 막아,
+  // 복구되기 전(빈) form/step이 먼저 저장되어 복구 데이터를 덮어쓰는 것을 방지한다
+  const [restored, setRestored] = useState(false);
 
   // 폼/스텝 변경 시 sessionStorage에 저장
   useEffect(() => {
@@ -227,9 +217,35 @@ export default function GeneratePage() {
     } catch {}
   }, [form, step]);
 
+  // 입력 내용/단계가 바뀔 때마다 (디바운스) Firestore에도 임시저장
+  // (sessionStorage는 탭 종료/오류 시 사라질 수 있어 브라우저 저장소만으로는 불안정.
+  //  단계 전환 시점에만 저장하면 같은 단계 안에서 입력하다 끊겼을 때 그 내용이
+  //  통째로 유실되므로, 입력값 자체를 디바운스로 추적해 저장한다)
+  useEffect(() => {
+    if (!sessionId || !restored) return;
+    const timer = setTimeout(() => {
+      saveFormDraft(sessionId, form, step).catch(() => {});
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [form, step, sessionId, restored]);
+
   // 활성 세션 로드
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setRestored(true);
+      return;
+    }
+
+    // ?new=1: 기존 작성 중이던 세션은 마이페이지 기록으로 보관하고, 새 빈 세션으로 시작
+    if (isNewSession) {
+      startNewSession(user.uid).then((newId) => {
+        setSessionId(newId);
+        setSessionInfo(null);
+        setRestored(true);
+      });
+      return;
+    }
+
     getActiveSession(user.uid).then((session) => {
       if (session) {
         setSessionId(session.id);
@@ -238,9 +254,30 @@ export default function GeneratePage() {
           generationCount: session.generationCount,
         });
         setForm((prev) => ({ ...prev, productName: session.productName as string }));
+
+        // sessionStorage에 작성 내용이 없는 경우(새 기기/탭, 마이페이지에서
+        // "이어서 작성하기" 등) Firestore에 보관해 둔 마지막 임시저장본/콘티로 복구
+        if (!hasLocalDraft) {
+          if (session.formDraft) {
+            setForm((prev) => ({ ...prev, ...session.formDraft }));
+          }
+          // 콘티가 이미 생성되어 있어도 "이어서 작성하기"는 완성본이 아닌
+          // 입력 폼(이전에 작성한 내용 포함)으로 이동해, 내용을 수정하고
+          // 다시 생성할 수 있게 한다. 완성본은 "콘티 보기" 버튼으로 확인한다.
+          const conti = session.contiText || session.contiDraft;
+          if (conti) {
+            setRawOutput(conti);
+          }
+          if (typeof session.formStep === "number" && session.formStep > 0 && session.formStep < 10) {
+            setStep(session.formStep);
+          } else if (conti) {
+            setStep(9);
+          }
+        }
       }
+      setRestored(true);
     });
-  }, [user]);
+  }, [user, hasLocalDraft, isNewSession]);
 
   // 생성 시작 (세션 체크 → 결제 or 바로 생성)
   async function handleGenerate() {
@@ -294,6 +331,7 @@ export default function GeneratePage() {
     setGenerating(true);
     setRawOutput("");
     setStep(10); // 결과 단계
+    let full = ""; // catch에서도 접근해 부분 결과를 보존하기 위해 try 밖에 선언
 
     try {
       const res = await fetch("/api/generate", {
@@ -307,7 +345,6 @@ export default function GeneratePage() {
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let full = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -324,6 +361,8 @@ export default function GeneratePage() {
       setSessionInfo(prev => prev ? { ...prev, generationCount: prev.generationCount + 1 } : prev);
     } catch (err) {
       setRawOutput("[오류] 콘티 생성 중 문제가 발생했습니다. 다시 시도해주세요.");
+      // 중간까지 생성된 내용을 보존해 두면 마이페이지 등에서 복구할 수 있다
+      if (full) saveContiDraft(sid, full).catch(() => {});
       console.error(err);
     } finally {
       setGenerating(false);
@@ -360,7 +399,9 @@ export default function GeneratePage() {
     const previousOutput = rawOutput;
     setChatInput("");
     setGenerating(true);
-    setRawOutput("");
+    setChangedSections(new Map());
+    setRawOutput("");  // 화면 초기화 후 스트리밍 시작
+    let full = "";
 
     try {
       const res = await fetch("/api/generate", {
@@ -373,17 +414,33 @@ export default function GeneratePage() {
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let full = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         full += decoder.decode(value);
-        setRawOutput(full);
-        outputRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+        setRawOutput(full);  // 실시간 스트리밍 표시 (스크롤 없음)
       }
+
+      // 완료 후 변경 섹션 감지 및 하이라이트
+      const changed = detectChangedSections(previousOutput, full);
+      setChangedSections(changed);
+      setTimeout(() => setChangedSections(new Map()), 30000);
+
+      // 완료 후에만 변경된 첫 번째 섹션으로 스크롤
+      const sectionRefMap: Record<string, React.RefObject<HTMLDivElement | null>> = {
+        title: titleRef, intro: introRef, main: mainRef, conclusion: conclusionRef,
+      };
+      const firstChanged = ["title", "intro", "main", "conclusion"].find(k => changed.has(k));
+      if (firstChanged) {
+        sectionRefMap[firstChanged].current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+
       setSessionInfo(prev => prev ? { ...prev, generationCount: prev.generationCount + 1 } : prev);
+      if (sessionId) await saveContiText(sessionId, full);
     } catch (err) {
-      setRawOutput("[오류] 수정 중 문제가 발생했습니다. 다시 시도해주세요.");
+      setRawOutput(previousOutput);  // 오류 시 이전 콘티 복원
+      alert("수정 중 문제가 발생했습니다. 다시 시도해주세요.");
+      if (sessionId && full) saveContiDraft(sessionId, full).catch(() => {});
       console.error(err);
     } finally {
       setGenerating(false);
@@ -412,13 +469,40 @@ export default function GeneratePage() {
         {showDesignPaymentGate && (
           <PaymentGateModal onClose={() => setShowDesignPaymentGate(false)} />
         )}
+        {reviewGate.showModal && (
+          <ReviewModal
+            onSubmit={(star, text) => reviewGate.handleSubmit(star, text, sessionId ?? undefined)}
+            onSkip={reviewGate.handleSkip}
+            title="콘티 작성, 어떠셨나요?"
+            description={"완성된 콘티에 대한 솔직한 후기를 들려주세요.\n서비스 개선에 큰 도움이 됩니다."}
+          />
+        )}
         {/* 헤더 */}
         <header className="sticky top-0 z-40 bg-white border-b border-gray-100">
           <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-            <Link href="/" className="bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded-full">
+            <button
+              onClick={() => reviewGate.guardedNavigate(() => router.push("/"))}
+              className="bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded-full"
+            >
               상세페이지의 정석 ✦
-            </Link>
+            </button>
             <div className="flex items-center gap-3">
+              {user && (
+                <>
+                  <button
+                    onClick={() => reviewGate.guardedNavigate(() => logout())}
+                    className="text-sm font-semibold text-gray-500 hover:text-gray-900 transition-colors"
+                  >
+                    로그아웃
+                  </button>
+                  <button
+                    onClick={() => reviewGate.guardedNavigate(() => router.push("/mypage"))}
+                    className="text-sm font-semibold text-gray-500 hover:text-gray-900 transition-colors"
+                  >
+                    마이페이지
+                  </button>
+                </>
+              )}
               {generating && (
                 <span className="text-sm text-blue-600 animate-pulse">AI가 콘티를 작성하고 있습니다...</span>
               )}
@@ -457,9 +541,21 @@ export default function GeneratePage() {
           )}
 
           {/* 타이틀 */}
-          {parsed?.projectTitle && (
-            <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-6">
-              <h1 className="text-2xl font-black text-gray-900 mb-2">{parsed.projectTitle}</h1>
+          {parsed && parsed.projectTitles.length > 0 && (
+            <div ref={titleRef} className={`bg-white rounded-2xl border p-6 mb-6 transition-all duration-500 ${
+              changedSections.has("title") ? "border-emerald-400 ring-2 ring-emerald-100" : "border-gray-200"
+            }`}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-bold text-gray-400">프로젝트 제목 후보</span>
+                {changedSections.has("title") && <span className="text-xs text-emerald-600">수정 완료 ✓</span>}
+              </div>
+              <ol className="space-y-1 mb-2">
+                {parsed.projectTitles.map((title, i) => (
+                  <li key={i} className="text-xl font-black text-gray-900">
+                    {i + 1}. {title}
+                  </li>
+                ))}
+              </ol>
               {parsed.coreCopy && (
                 <p className="text-blue-600 font-semibold">{parsed.coreCopy}</p>
               )}
@@ -470,9 +566,18 @@ export default function GeneratePage() {
           <div className="space-y-6" ref={outputRef}>
             {parsed?.intro.content ? (
               <>
-                <SectionBlock title="도입부" intent={parsed.intro.intent} content={parsed.intro.content} onCopy={handleCopy} />
-                <SectionBlock title="본론부" intent={parsed.main.intent} content={parsed.main.content} onCopy={handleCopy} />
-                <SectionBlock title="결론부" intent={parsed.conclusion.intent} content={parsed.conclusion.content} onCopy={handleCopy} />
+                <div ref={introRef}>
+                  <ContiSectionBlock title="도입부" intent={parsed.intro.intent} content={parsed.intro.content} onCopy={handleCopy}
+                    changeInfo={changedSections.get("intro")} />
+                </div>
+                <div ref={mainRef}>
+                  <ContiSectionBlock title="본론부" intent={parsed.main.intent} content={parsed.main.content} onCopy={handleCopy}
+                    changeInfo={changedSections.get("main")} />
+                </div>
+                <div ref={conclusionRef}>
+                  <ContiSectionBlock title="결론부" intent={parsed.conclusion.intent} content={parsed.conclusion.content} onCopy={handleCopy}
+                    changeInfo={changedSections.get("conclusion")} />
+                </div>
               </>
             ) : (
               <div className="bg-white rounded-2xl border border-gray-200 p-6">
@@ -574,9 +679,24 @@ export default function GeneratePage() {
           <Link href="/" className="bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded-full">
             상세페이지의 정석 ✦
           </Link>
-          <span className="text-xs bg-green-50 text-green-600 border border-green-200 px-3 py-1 rounded-full font-semibold">
-            🎁 테스트 기간 무료
-          </span>
+          <div className="flex items-center gap-3">
+            {user && (
+              <>
+                <button
+                  onClick={() => logout()}
+                  className="text-xs font-semibold text-gray-500 hover:text-gray-900 transition-colors"
+                >
+                  로그아웃
+                </button>
+                <Link href="/mypage" className="text-xs font-semibold text-gray-500 hover:text-gray-900 transition-colors">
+                  마이페이지
+                </Link>
+              </>
+            )}
+            <span className="text-xs bg-green-50 text-green-600 border border-green-200 px-3 py-1 rounded-full font-semibold">
+              🎁 테스트 기간 무료
+            </span>
+          </div>
         </div>
       </header>
 
@@ -652,6 +772,18 @@ export default function GeneratePage() {
                 <input value={form.productName} onChange={e => update("productName", e.target.value)} placeholder="예: 에어클린 프로" className={inputCls} disabled={!!sessionInfo} />
                 {sessionInfo && <p className="text-xs text-amber-600 mt-1">현재 세션 제품: {sessionInfo.productName}</p>}
               </Field>
+              <label className="flex items-start gap-3 cursor-pointer group mt-1">
+                <input
+                  type="checkbox"
+                  checked={!!form.requestProductName}
+                  onChange={() => setForm((prev) => ({ ...prev, requestProductName: !prev.requestProductName }))}
+                  className="mt-0.5 w-4 h-4 accent-blue-600 cursor-pointer"
+                />
+                <div>
+                  <span className="text-sm font-semibold text-gray-700 group-hover:text-blue-600 transition-colors">제품명 추천 받기</span>
+                  <p className="text-xs text-gray-400 mt-0.5">콘티 상단에 추천 제품명 후보 3개를 함께 제안합니다</p>
+                </div>
+              </label>
             </FormStep>
           )}
 
@@ -723,7 +855,7 @@ export default function GeneratePage() {
           )}
 
           {step === 7 && (
-            <FormStep title="시장 상황" subtitle="카테고리 트렌드나 시장 문제점">
+            <FormStep title="시장 상황 & 도입부 전략" subtitle="카테고리 인지도와 도입부를 여는 방식을 설정합니다">
               <Field label="고객 인지도 수준 *">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
                   <button
@@ -743,6 +875,37 @@ export default function GeneratePage() {
                     <div className="text-xl mb-1">💡</div>
                     <div className="font-bold text-gray-900 text-sm mb-1">인지도 낮음</div>
                     <div className="text-xs text-gray-500 leading-relaxed">고객에게 제품 필요성부터 설득해야 하는 카테고리<br />예: 신개념 헬스케어 기기, 생소한 라이프스타일 제품</div>
+                  </button>
+                </div>
+              </Field>
+              <Field label="도입부 전략 *">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => update("introStyle", "empathy")}
+                    className={`border-2 rounded-xl p-4 text-left transition-all ${form.introStyle === "empathy" ? "border-blue-600 bg-blue-50" : "border-gray-200 hover:border-blue-300"}`}
+                  >
+                    <div className="text-xl mb-1">💬</div>
+                    <div className="font-bold text-gray-900 text-sm mb-1">공감 유도형</div>
+                    <div className="text-xs text-gray-500 leading-relaxed">페인포인트 공감 →<br />솔루션 등장<br /><span className="text-blue-500">필요성 설득 · 불편함 소구</span></div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => update("introStyle", "usp")}
+                    className={`border-2 rounded-xl p-4 text-left transition-all ${form.introStyle === "usp" ? "border-blue-600 bg-blue-50" : "border-gray-200 hover:border-blue-300"}`}
+                  >
+                    <div className="text-xl mb-1">⚡</div>
+                    <div className="font-bold text-gray-900 text-sm mb-1">USP 강타형</div>
+                    <div className="text-xs text-gray-500 leading-relaxed">제품 강점 직격 →<br />이유 설명<br /><span className="text-blue-500">임팩트 있는 첫인상</span></div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => update("introStyle", "auto")}
+                    className={`border-2 rounded-xl p-4 text-left transition-all ${form.introStyle === "auto" ? "border-blue-600 bg-blue-50" : "border-gray-200 hover:border-blue-300"}`}
+                  >
+                    <div className="text-xl mb-1">🤖</div>
+                    <div className="font-bold text-gray-900 text-sm mb-1">AI 자동 판단</div>
+                    <div className="text-xs text-gray-500 leading-relaxed">인지도 수준을 참고해<br />AI가 최적 전략 선택<br /><span className="text-blue-500">잘 모르겠다면 이걸로</span></div>
                   </button>
                 </div>
               </Field>
@@ -861,7 +1024,7 @@ function canNext(step: number, form: FormData): boolean {
     4: !!form.usp1.trim() && !!form.usp2.trim() && !!form.usp3.trim(),
     5: true,
     6: true,
-    7: !!form.marketAwareness,
+    7: !!form.marketAwareness && !!form.introStyle,
     8: !!form.priceInfo.trim(),
     9: !!form.toneAndManner.trim(),
   };

@@ -24,7 +24,7 @@ const nanumMyeongjo = Nanum_Myeongjo({
 export const metadata: Metadata = {
   title: "상세페이지의 정석 — 팔리는 콘티를 AI로",
   description:
-    "1,000개 프로젝트를 성공시킨 와디즈 PD 출신의 성공 DNA를 담은 상세페이지 콘티 자동 생성 서비스",
+    "1,500개+ 프로젝트를 성공시킨 와디즈 PD 출신 전문가들의 성공 DNA를 담은 상세페이지 콘티 자동 생성 서비스",
 };
 
 export default function RootLayout({

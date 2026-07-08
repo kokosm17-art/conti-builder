@@ -19,7 +19,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      router.push("/generate");
+      const redirect = new URLSearchParams(window.location.search).get("redirect");
+      router.push(redirect || "/generate");
     } catch {
       setError("이메일 또는 비밀번호를 확인해주세요.");
     } finally {

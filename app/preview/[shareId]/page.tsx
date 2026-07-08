@@ -84,6 +84,7 @@ export default function SharePreviewPage() {
             fontChoice={fontChoice}
             assets={assets}
             motionEnabled={true}
+            infiniteMotion={true}
           />
         </div>
       </div>

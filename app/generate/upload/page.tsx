@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { getActiveSession, updateDesignAssets } from "@/lib/session";
 import { PLACEHOLDER_RE } from "@/lib/conti-parser";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { ArrowLeft, Upload, ImageIcon, GripVertical } from "lucide-react";
 
 const STORAGE_KEY = "contie_upload_slots";
@@ -14,7 +16,17 @@ interface Slot {
   id: string;
   guideText: string;
   imageUrl: string | null;
+  aspectRatio: string; // "3/4"|"4/5"|"1/1"|"4/3"|"16/9"|"original"
 }
+
+const ASPECT_RATIO_OPTIONS: { label: string; value: string }[] = [
+  { label: "3:4", value: "3/4" },
+  { label: "4:5", value: "4/5" },
+  { label: "1:1", value: "1/1" },
+  { label: "4:3", value: "4/3" },
+  { label: "16:9", value: "16/9" },
+  { label: "원본", value: "original" },
+];
 
 function parsePlaceholders(contiText: string): Slot[] {
   // 디자인 생성(lib/design-ai.ts)과 동일하게 "한 줄 전체가 (설명)"인 라인만
@@ -25,7 +37,7 @@ function parsePlaceholders(contiText: string): Slot[] {
   for (const line of contiText.split("\n")) {
     const match = line.match(PLACEHOLDER_RE);
     if (match) {
-      results.push({ id: `placeholder_${i}`, guideText: match[1], imageUrl: null });
+      results.push({ id: `placeholder_${i}`, guideText: match[1], imageUrl: null, aspectRatio: "original" });
       i++;
     }
   }
@@ -38,7 +50,13 @@ const MAX_SIZE_MB = 10;
 export default function UploadPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [session, setSession] = useState<{ id: string; contiText?: string; assets?: Record<string, string> } | null>(null);
+  const [session, setSession] = useState<{
+    id: string;
+    contiText?: string;
+    assets?: Record<string, string>;
+    htmlDesign?: { fullHtml: string } | null;
+    designResult?: { sections: unknown[] } | null;
+  } | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -58,7 +76,7 @@ export default function UploadPage() {
         router.push("/generate");
         return;
       }
-      setSession(active as typeof session);
+      setSession(active as typeof session & { htmlDesign?: { fullHtml: string } | null; designResult?: { sections: unknown[] } | null });
       const parsed = parsePlaceholders(active.contiText);
       // sessionStorage에서 이미지 복원 (탭 닫지 않은 경우)
       try {
@@ -68,6 +86,7 @@ export default function UploadPage() {
           parsed.forEach((slot) => {
             const found = savedSlots.find((s) => s.id === slot.id);
             if (found?.imageUrl) slot.imageUrl = found.imageUrl;
+            if (found?.aspectRatio) slot.aspectRatio = found.aspectRatio;
           });
         }
       } catch {}
@@ -77,9 +96,15 @@ export default function UploadPage() {
 
   function persistSlots(newSlots: Slot[]) {
     try {
-      const data = newSlots.map((s) => ({ id: s.id, guideText: s.guideText, imageUrl: s.imageUrl }));
+      const data = newSlots.map((s) => ({ id: s.id, guideText: s.guideText, imageUrl: s.imageUrl, aspectRatio: s.aspectRatio }));
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch {}
+  }
+
+  function handleAspectRatioChange(placeholderId: string, ratio: string) {
+    const newSlots = slots.map((s) => s.id === placeholderId ? { ...s, aspectRatio: ratio } : s);
+    setSlots(newSlots);
+    persistSlots(newSlots);
   }
 
   async function saveAssets(newSlots: Slot[]) {
@@ -217,8 +242,8 @@ export default function UploadPage() {
         {/* 슬롯 그리드 */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
           {slots.map((slot, idx) => (
+            <div key={slot.id} className="flex flex-col gap-2">
             <div
-              key={slot.id}
               className={`relative rounded-2xl overflow-hidden border-2 transition-all duration-200 select-none ${
                 dragFrom === slot.id
                   ? "opacity-40 scale-95 border-blue-400"
@@ -316,6 +341,25 @@ export default function UploadPage() {
                 </label>
               )}
             </div>
+            {/* 업로드된 이미지의 표시 비율 선택 */}
+            {slot.imageUrl && (
+              <div className="flex flex-wrap gap-1 justify-center">
+                {ASPECT_RATIO_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => handleAspectRatioChange(slot.id, opt.value)}
+                    className={`text-xs font-semibold px-2 py-1 rounded-lg border transition-colors ${
+                      slot.aspectRatio === opt.value
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-500 border-gray-200 hover:border-blue-400 hover:text-blue-600"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            </div>
           ))}
         </div>
 
@@ -334,12 +378,54 @@ export default function UploadPage() {
               ? "이미지 없이도 디자인 생성이 가능합니다"
               : `${filledCount}/${slots.length}개 업로드됨`}
           </p>
-          <button
-            onClick={() => router.push("/generate/design")}
-            className="bg-blue-600 text-white font-bold px-8 py-3.5 rounded-xl hover:bg-blue-700 transition-colors text-sm whitespace-nowrap"
-          >
-            디자인 생성하기 ✦
-          </button>
+          {/* 이미 생성된 HTML 디자인이 있으면 "디자인 보기", 없으면 "생성하기" */}
+          {session?.htmlDesign?.fullHtml ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  if (!session) return;
+                  // htmlDesign을 먼저 지워야 design 페이지가 재생성을 건너뛰지 않음
+                  await updateDoc(doc(db, "sessions", session.id), { htmlDesign: null });
+                  router.push("/generate/design");
+                }}
+                className="text-gray-500 font-semibold px-4 py-3.5 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors text-sm whitespace-nowrap"
+              >
+                재생성
+              </button>
+              <button
+                onClick={() => router.push(`/generate/preview-html/${session.id}`)}
+                className="bg-blue-600 text-white font-bold px-8 py-3.5 rounded-xl hover:bg-blue-700 transition-colors text-sm whitespace-nowrap"
+              >
+                디자인 보기 →
+              </button>
+            </div>
+          ) : session?.designResult && (session.designResult as {sections: unknown[]}).sections?.length > 0 ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  if (!session) return;
+                  await updateDoc(doc(db, "sessions", session.id), { designResult: null });
+                  router.push("/generate/design");
+                }}
+                className="text-gray-500 font-semibold px-4 py-3.5 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors text-sm whitespace-nowrap"
+              >
+                재생성
+              </button>
+              <button
+                onClick={() => router.push(`/generate/preview/${session.id}`)}
+                className="bg-blue-600 text-white font-bold px-8 py-3.5 rounded-xl hover:bg-blue-700 transition-colors text-sm whitespace-nowrap"
+              >
+                디자인 보기 →
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => router.push("/generate/design")}
+              className="bg-blue-600 text-white font-bold px-8 py-3.5 rounded-xl hover:bg-blue-700 transition-colors text-sm whitespace-nowrap"
+            >
+              디자인 생성하기 ✦
+            </button>
+          )}
         </div>
       </div>
     </div>

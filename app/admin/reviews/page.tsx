@@ -1,21 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Star } from "lucide-react";
-
-const ADMIN_EMAIL = "kokosm17@gmail.com";
 
 interface Review {
   id: string;
   uid: string;
   star: number;
   text: string;
+  type?: "conti" | "design";
   createdAt: { seconds: number } | null;
 }
+
+const TYPE_LABEL: Record<string, string> = {
+  conti: "콘티",
+  design: "디자인",
+};
 
 function StarDisplay({ count }: { count: number }) {
   return (
@@ -32,46 +35,42 @@ function StarDisplay({ count }: { count: number }) {
 
 export default function AdminReviewsPage() {
   const { user, loading: authLoading } = useAuth();
-  const router = useRouter();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (authLoading) return;
-    if (!user) { router.push("/login"); return; }
-    if (user.email !== ADMIN_EMAIL) return; // 접근 거부 (렌더링 단계에서 처리)
-
+    if (authLoading || !user) return;
     loadReviews();
   }, [user, authLoading]);
 
   async function loadReviews() {
-    const q = query(collection(db, "reviews"), orderBy("createdAt", "desc"));
-    const snap = await getDocs(q);
-    const data = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    })) as Review[];
-    setReviews(data);
-    setLoading(false);
+    try {
+      const q = query(collection(db, "reviews"), orderBy("createdAt", "desc"));
+      const snap = await getDocs(q);
+      const data = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as Review[];
+      setReviews(data);
+    } catch (err) {
+      console.error("후기 목록 조회 실패:", err);
+      setError(err instanceof Error ? err.message : "후기 목록을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  // 접근 제어
-  if (!authLoading && user && user.email !== ADMIN_EMAIL) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4">
-        <div className="text-4xl">🔒</div>
-        <p className="font-black text-gray-900">접근 권한이 없습니다.</p>
-        <button onClick={() => router.push("/")} className="text-blue-600 text-sm font-semibold hover:underline">
-          홈으로
-        </button>
-      </div>
-    );
+  if (loading) {
+    return <div className="text-gray-400 animate-pulse font-semibold text-center py-20">로딩 중...</div>;
   }
 
-  if (authLoading || loading) {
+  if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-400 animate-pulse font-semibold">로딩 중...</div>
+      <div className="flex flex-col items-center justify-center gap-4 px-6 py-20 text-center">
+        <div className="text-4xl">⚠️</div>
+        <p className="font-black text-gray-900">후기 목록을 불러오지 못했습니다.</p>
+        <p className="text-xs text-gray-400 font-mono break-all max-w-md">{error}</p>
       </div>
     );
   }
@@ -81,69 +80,62 @@ export default function AdminReviewsPage() {
     : "-";
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="font-black text-gray-900">어드민</span>
-            <span className="text-xs text-gray-400">후기 관리</span>
-          </div>
-          <button onClick={() => router.push("/")} className="text-xs text-gray-400 hover:text-gray-600">
-            홈으로
-          </button>
+    <div>
+      {/* 요약 */}
+      <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="bg-white rounded-2xl p-5 text-center shadow-sm border border-gray-100">
+          <div className="text-3xl font-black text-gray-900">{reviews.length}</div>
+          <div className="text-xs text-gray-400 mt-1">총 후기</div>
         </div>
-      </header>
-
-      <div className="max-w-3xl mx-auto px-6 py-8">
-        {/* 요약 */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
-          <div className="bg-white rounded-2xl p-5 text-center shadow-sm border border-gray-100">
-            <div className="text-3xl font-black text-gray-900">{reviews.length}</div>
-            <div className="text-xs text-gray-400 mt-1">총 후기</div>
-          </div>
-          <div className="bg-white rounded-2xl p-5 text-center shadow-sm border border-gray-100">
-            <div className="text-3xl font-black text-yellow-500">★ {avg}</div>
-            <div className="text-xs text-gray-400 mt-1">평균 별점</div>
-          </div>
-          <div className="bg-white rounded-2xl p-5 text-center shadow-sm border border-gray-100">
-            <div className="text-3xl font-black text-blue-600">
-              {reviews.filter((r) => r.text?.trim()).length}
-            </div>
-            <div className="text-xs text-gray-400 mt-1">텍스트 후기</div>
-          </div>
+        <div className="bg-white rounded-2xl p-5 text-center shadow-sm border border-gray-100">
+          <div className="text-3xl font-black text-yellow-500">★ {avg}</div>
+          <div className="text-xs text-gray-400 mt-1">평균 별점</div>
         </div>
-
-        {/* 후기 목록 */}
-        {reviews.length === 0 ? (
-          <div className="text-center py-20 text-gray-400">
-            <p>아직 후기가 없습니다.</p>
+        <div className="bg-white rounded-2xl p-5 text-center shadow-sm border border-gray-100">
+          <div className="text-3xl font-black text-blue-600">
+            {reviews.filter((r) => r.text?.trim()).length}
           </div>
-        ) : (
-          <div className="space-y-3">
-            {reviews.map((review) => {
-              const date = review.createdAt
-                ? new Date(review.createdAt.seconds * 1000).toLocaleDateString("ko-KR", {
-                    year: "numeric", month: "long", day: "numeric",
-                  })
-                : "";
-              return (
-                <div key={review.id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <StarDisplay count={review.star} />
-                    <span className="text-xs text-gray-400">{date}</span>
-                  </div>
-                  {review.text ? (
-                    <p className="text-sm text-gray-700 leading-relaxed">{review.text}</p>
-                  ) : (
-                    <p className="text-xs text-gray-300 italic">텍스트 후기 없음</p>
-                  )}
-                  <p className="text-xs text-gray-300 mt-2 font-mono">{review.uid.slice(0, 8)}...</p>
-                </div>
-              );
-            })}
-          </div>
-        )}
+          <div className="text-xs text-gray-400 mt-1">텍스트 후기</div>
+        </div>
       </div>
+
+      {/* 후기 목록 */}
+      {reviews.length === 0 ? (
+        <div className="text-center py-20 text-gray-400">
+          <p>아직 후기가 없습니다.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {reviews.map((review) => {
+            const date = review.createdAt
+              ? new Date(review.createdAt.seconds * 1000).toLocaleDateString("ko-KR", {
+                  year: "numeric", month: "long", day: "numeric",
+                })
+              : "";
+            return (
+              <div key={review.id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <StarDisplay count={review.star} />
+                    {review.type && (
+                      <span className="text-xs font-semibold text-blue-500 bg-blue-50 rounded-full px-2 py-0.5">
+                        {TYPE_LABEL[review.type] ?? review.type}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-400">{date}</span>
+                </div>
+                {review.text ? (
+                  <p className="text-sm text-gray-700 leading-relaxed">{review.text}</p>
+                ) : (
+                  <p className="text-xs text-gray-300 italic">텍스트 후기 없음</p>
+                )}
+                <p className="text-xs text-gray-300 mt-2 font-mono">{review.uid.slice(0, 8)}...</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -60,7 +60,7 @@ const DEMO_CONTI = [
 ];
 
 export default function LandingPage() {
-  const { user, freeTrialUsed } = useAuth();
+  const { user, freeTrialUsed, logout } = useAuth();
   const [showPaymentGate, setShowPaymentGate] = useState(false);
 
   const isReturning = !!user && freeTrialUsed;
@@ -84,26 +84,39 @@ export default function LandingPage() {
             </span>
           </div>
           <nav className="hidden md:flex items-center gap-8 text-sm text-gray-600">
+            <a href="#how-it-works" className="hover:text-gray-900 transition-colors">이용 방법</a>
             <a href="#builder" className="hover:text-gray-900 transition-colors">콘티 빌더</a>
             <a href="#framework" className="hover:text-gray-900 transition-colors">차별점</a>
-            <a href="#stats" className="hover:text-gray-900 transition-colors">성과</a>
           </nav>
-          {user ? (
-            <Link
-              href="/generate"
-              onClick={isReturning ? handleGatedCta : undefined}
-              className="bg-blue-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              콘티 만들기
+          <div className="flex items-center gap-4">
+            {user && (
+              <button
+                onClick={() => logout()}
+                className="text-sm font-semibold text-gray-500 hover:text-gray-900 transition-colors"
+              >
+                로그아웃
+              </button>
+            )}
+            <Link href="/mypage" className="text-sm font-semibold text-gray-500 hover:text-gray-900 transition-colors">
+              마이페이지
             </Link>
-          ) : (
-            <Link
-              href="/login"
-              className="bg-blue-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              시작하기
-            </Link>
-          )}
+            {user ? (
+              <a
+                href="/generate?new=1"
+                onClick={isReturning ? handleGatedCta : undefined}
+                className="bg-blue-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                콘티 만들기
+              </a>
+            ) : (
+              <Link
+                href="/login"
+                className="bg-blue-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                시작하기
+              </Link>
+            )}
+          </div>
         </div>
       </header>
 
@@ -116,16 +129,16 @@ export default function LandingPage() {
             이식하세요.
           </h1>
           <p className="text-base sm:text-lg text-gray-500 mb-10 leading-relaxed">
-            1,000개 프로젝트를 성공시킨 와디즈 PD 출신<br />
+            1,000개 이상 프로젝트를 성공시킨<br />
+            와디즈 PD 출신 전문가들의 노하우 집약
+          </p>
+          <p className="text-base sm:text-lg text-gray-500 mb-10 leading-relaxed -mt-6 font-bold">
             독보적인 &apos;성공 DNA&apos;를 이 도구에 모두 담았습니다.
           </p>
-          <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium px-5 py-3 rounded-full mb-3">
+          <div className="inline-flex items-center gap-3 bg-blue-50 border border-blue-200 text-blue-700 text-xl font-medium px-8 py-5 rounded-full mb-6">
             <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
-            클릭 한 번으로 &apos;팔리는 콘티&apos;를 만들어보세요.
+            <span>클릭 한 번으로 <span style={{ fontWeight: 800 }}>{`'팔리는 상세페이지'`}</span>를 만들어보세요.</span>
           </div>
-          <p className="text-xs text-gray-400 mb-10">
-            * 콘티란? 상세페이지의 뼈대가 되는 기획안입니다
-          </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             {isReturning ? (
               <>
@@ -144,12 +157,12 @@ export default function LandingPage() {
               </>
             ) : (
               <>
-                <Link
-                  href="/generate"
+                <a
+                  href="/generate?new=1"
                   className="bg-blue-600 text-white font-bold px-8 py-4 rounded-xl hover:bg-blue-700 transition-colors text-base w-full sm:w-auto text-center"
                 >
                   무료 체험하기
-                </Link>
+                </a>
                 <a
                   href="#framework"
                   className="border border-gray-300 text-gray-700 font-semibold px-8 py-4 rounded-xl hover:bg-gray-50 transition-colors text-base w-full sm:w-auto text-center"
@@ -168,7 +181,7 @@ export default function LandingPage() {
           {[
             { icon: "👥", value: "1,000+", label: "프로젝트 디렉팅" },
             { icon: "📈", value: "400억+", label: "누적 매출 (KRW)" },
-            { icon: "🏆", value: "성과 1위", label: "3년 연속 기록" },
+            { icon: "🌐", value: "전분야 커버", label: "유무형 전체 카테고리 경험" },
           ].map((s) => (
             <div key={s.label} className="bg-white rounded-2xl p-8 text-center shadow-sm border border-gray-100">
               <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 text-xl">
@@ -183,6 +196,122 @@ export default function LandingPage() {
           <a href="#builder" className="text-gray-500 text-sm hover:text-gray-700">
             콘티 빌더 체험하기 ↓
           </a>
+        </div>
+      </section>
+
+      {/* 이용 흐름 */}
+      <section id="how-it-works" className="py-20 px-6">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-14">
+            <div className="text-blue-600 text-xs font-bold tracking-widest uppercase mb-3">HOW IT WORKS</div>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 mb-4">
+              단 4단계로 완성되는<br />프로 수준의 상세페이지
+            </h2>
+            <p className="text-gray-500 text-sm">입력부터 디자인 완성까지, 전문 지식 없이도 가능합니다</p>
+          </div>
+
+          {/* 데스크탑: 가로 흐름 */}
+          <div className="hidden md:flex items-start gap-0">
+            {[
+              {
+                step: "01",
+                title: "제품 정보 입력",
+                desc: "브랜드명, 타깃 고객, 핵심 차별점을 간단히 입력합니다",
+                icon: "✏️",
+              },
+              {
+                step: "02",
+                title: "AI 콘티 생성",
+                desc: "AI가 도입·본론·결론 카피와 이미지 자리를 자동으로 기획합니다",
+                icon: "✦",
+              },
+              {
+                step: "03",
+                title: "이미지 첨부\n+ 디자인 톤 선택",
+                desc: "제품 이미지를 업로드하고 5가지 디자인 톤 중 하나를 선택합니다",
+                icon: "🎨",
+              },
+              {
+                step: "04",
+                title: "상세페이지\n디자인 생성",
+                desc: "AI가 레이아웃과 모션을 자동 조합해 PNG·GIF 파일로 완성합니다",
+                icon: "⚡",
+              },
+            ].map((item, i, arr) => (
+              <React.Fragment key={item.step}>
+                <div className="flex-1 flex flex-col items-center text-center px-4">
+                  <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-2xl mb-4 shadow-md">
+                    <span>{item.icon}</span>
+                  </div>
+                  <div className="text-xs font-bold text-blue-600 mb-2">STEP {item.step}</div>
+                  <h3 className="text-base font-black text-gray-900 mb-2 whitespace-pre-line leading-snug">
+                    {item.title}
+                  </h3>
+                  <p className="text-xs text-gray-500 leading-relaxed">{item.desc}</p>
+                </div>
+                {i < arr.length - 1 && (
+                  <div className="flex-none flex items-start pt-7 px-1 text-gray-300 text-xl font-light select-none">
+                    →
+                  </div>
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+
+          {/* 모바일: 세로 흐름 */}
+          <div className="md:hidden flex flex-col gap-4">
+            {[
+              {
+                step: "01",
+                title: "제품 정보 입력",
+                desc: "브랜드명, 타깃 고객, 핵심 차별점을 간단히 입력합니다",
+                icon: "✏️",
+              },
+              {
+                step: "02",
+                title: "AI 콘티 생성",
+                desc: "AI가 도입·본론·결론 카피와 이미지 자리를 자동으로 기획합니다",
+                icon: "✦",
+              },
+              {
+                step: "03",
+                title: "이미지 첨부 + 디자인 톤 선택",
+                desc: "제품 이미지를 업로드하고 5가지 디자인 톤 중 하나를 선택합니다",
+                icon: "🎨",
+              },
+              {
+                step: "04",
+                title: "상세페이지 디자인 생성",
+                desc: "AI가 레이아웃과 모션을 자동 조합해 PNG·GIF 파일로 완성합니다",
+                icon: "⚡",
+              },
+            ].map((item, i, arr) => (
+              <React.Fragment key={item.step}>
+                <div className="flex items-start gap-4 bg-gray-50 rounded-2xl p-5">
+                  <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-xl flex-none shadow-sm">
+                    <span>{item.icon}</span>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-blue-600 mb-1">STEP {item.step}</div>
+                    <h3 className="text-sm font-black text-gray-900 mb-1">{item.title}</h3>
+                    <p className="text-xs text-gray-500 leading-relaxed">{item.desc}</p>
+                  </div>
+                </div>
+                {i < arr.length - 1 && (
+                  <div className="text-center text-gray-300 text-sm select-none">↓</div>
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+
+          <div className="text-center mt-12">
+            <a
+              href="/generate?new=1"
+              className="inline-block bg-blue-600 text-white font-bold px-8 py-4 rounded-xl hover:bg-blue-700 transition-colors text-sm"
+            >
+              지금 무료로 시작하기 →
+            </a>
+          </div>
         </div>
       </section>
 
@@ -294,9 +423,9 @@ export default function LandingPage() {
                 ))}
               </div>
               <div className="flex justify-end mt-6">
-                <Link href="/generate" className="bg-blue-600 text-white text-sm font-semibold px-6 py-2.5 rounded-lg hover:bg-blue-700 transition-colors">
+                <a href="/generate?new=1" className="bg-blue-600 text-white text-sm font-semibold px-6 py-2.5 rounded-lg hover:bg-blue-700 transition-colors">
                   직접 만들기 →
-                </Link>
+                </a>
               </div>
             </div>
 
@@ -335,29 +464,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 숫자 성과 섹션 */}
-      <section className="py-20 px-6 bg-gray-50">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
-            <div className="text-blue-600 text-xs font-bold tracking-widest uppercase mb-3">TRACK RECORD</div>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 mb-2">숫자가 증명하는 성과</h2>
-            <p className="text-gray-500">7년간 쌓아온 실적, 데이터로 확인하세요</p>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { value: "400억", label: "누적 매출 (KRW)" },
-              { value: "1,000+", label: "프로젝트" },
-              { value: "15+", label: "멀티 카테고리" },
-              { value: "7년", label: "업계 경력" },
-            ].map((s) => (
-              <div key={s.label} className="bg-white rounded-2xl p-6 text-center shadow-sm border border-gray-100">
-                <div className="text-3xl font-black text-gray-900 mb-1">{s.value}</div>
-                <div className="text-xs text-gray-400">{s.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {/* CTA 섹션 */}
       <section className="py-20 px-6">
@@ -388,12 +494,12 @@ export default function LandingPage() {
                 </>
               ) : (
                 <>
-                  <Link
-                    href="/generate"
+                  <a
+                    href="/generate?new=1"
                     className="bg-blue-600 text-white font-bold px-8 py-4 rounded-xl hover:bg-blue-700 transition-colors text-sm w-full sm:w-auto"
                   >
                     콘티 제작 시작하기 →
-                  </Link>
+                  </a>
                   <Link
                     href="/register"
                     className="border border-gray-300 text-gray-700 font-semibold px-8 py-4 rounded-xl hover:bg-white transition-colors text-sm w-full sm:w-auto"

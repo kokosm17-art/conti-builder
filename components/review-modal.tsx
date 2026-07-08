@@ -6,9 +6,20 @@ import { Star } from "lucide-react";
 interface ReviewModalProps {
   onSubmit: (star: number, text: string) => void;
   onSkip: () => void;
+  title?: string;
+  description?: string;
+  submitLabel?: string;
+  skipLabel?: string;
 }
 
-export function ReviewModal({ onSubmit, onSkip }: ReviewModalProps) {
+export function ReviewModal({
+  onSubmit,
+  onSkip,
+  title = "사용해 보셨나요?",
+  description = "솔직한 후기를 들려주세요.\n서비스 개선에 큰 도움이 됩니다.",
+  submitLabel = "후기 남기고 계속하기",
+  skipLabel = "건너뛰기",
+}: ReviewModalProps) {
   const [star, setStar] = useState(0);
   const [hovered, setHovered] = useState(0);
   const [text, setText] = useState("");
@@ -29,10 +40,10 @@ export function ReviewModal({ onSubmit, onSkip }: ReviewModalProps) {
         <div className="text-center mb-6">
           <div className="text-3xl mb-3">✦</div>
           <h2 className="text-lg font-black text-gray-900 mb-1">
-            사용해 보셨나요?
+            {title}
           </h2>
-          <p className="text-sm text-gray-500">
-            솔직한 후기를 들려주세요.<br />서비스 개선에 큰 도움이 됩니다.
+          <p className="text-sm text-gray-500 whitespace-pre-line">
+            {description}
           </p>
         </div>
 
@@ -79,14 +90,14 @@ export function ReviewModal({ onSubmit, onSkip }: ReviewModalProps) {
             disabled={star === 0 || submitting}
             className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm"
           >
-            {submitting ? "저장 중..." : "후기 남기고 다운로드"}
+            {submitting ? "저장 중..." : submitLabel}
           </button>
           <button
             onClick={onSkip}
             disabled={submitting}
             className="w-full text-gray-400 text-sm py-2 hover:text-gray-600 transition-colors"
           >
-            건너뛰고 다운로드
+            {skipLabel}
           </button>
         </div>
       </div>

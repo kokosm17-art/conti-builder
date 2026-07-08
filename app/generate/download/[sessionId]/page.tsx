@@ -10,11 +10,66 @@ import { DesignSection } from "@/lib/types";
 import { getToneById, TONES } from "@/components/design-system/tones";
 import { getAppliedFont } from "@/components/design-system/fonts";
 import { DesignRenderer } from "@/components/design-renderer";
-import { saveReview, markFreeTrialUsed } from "@/lib/session";
+import { saveReview, markFreeTrialUsed, markReviewDone } from "@/lib/session";
+import { isAdminEmail } from "@/lib/admin";
+import { wasReviewSkippedRecently, markReviewSkipped } from "@/lib/review-prompt";
 import { ReviewModal } from "@/components/review-modal";
 import { ArrowLeft, Download, CheckCircle } from "lucide-react";
 
 const UPLOAD_KEY = "contie_upload_slots";
+
+// html2canvas v1.4.x는 lab()/oklch() 등 CSS Color Level 4 색상 함수를 파싱하지 못한다.
+// Tailwind v4 기본 팔레트가 이 포맷을 사용하므로, onclone 콜백에서 Canvas API로 sRGB 변환한다.
+const MODERN_COLOR_RE = /\b(?:ok)?(?:lab|lch)\s*\(|oklch\s*\(/i;
+const COLOR_PROPS = [
+  "color", "background-color",
+  "border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
+  "outline-color", "text-decoration-color",
+];
+
+let _toRgbCtx: CanvasRenderingContext2D | null = null;
+const _toRgbCache = new Map<string, string>();
+
+function getToRgbCtx(): CanvasRenderingContext2D | null {
+  if (_toRgbCtx) return _toRgbCtx;
+  try {
+    const c = document.createElement("canvas");
+    c.width = c.height = 1;
+    _toRgbCtx = c.getContext("2d", { willReadFrequently: true });
+  } catch {}
+  return _toRgbCtx;
+}
+
+function toRgb(color: string): string {
+  if (_toRgbCache.has(color)) return _toRgbCache.get(color)!;
+  const ctx = getToRgbCtx();
+  if (!ctx) return color;
+  try {
+    ctx.clearRect(0, 0, 1, 1);
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, 1, 1);
+    const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+    const result = a < 255 ? `rgba(${r},${g},${b},${+(a / 255).toFixed(3)})` : `rgb(${r},${g},${b})`;
+    _toRgbCache.set(color, result);
+    return result;
+  } catch {
+    return color;
+  }
+}
+
+function fixModernColors(_clonedDoc: Document, clonedEl: HTMLElement): void {
+  [clonedEl, ...Array.from(clonedEl.querySelectorAll<HTMLElement>("*"))].forEach((el) => {
+    try {
+      const cs = window.getComputedStyle(el);
+      COLOR_PROPS.forEach((prop) => {
+        const val = cs.getPropertyValue(prop);
+        if (val && MODERN_COLOR_RE.test(val)) {
+          el.style.setProperty(prop, toRgb(val), "important");
+        }
+      });
+    } catch { /* skip */ }
+  });
+}
 
 interface DownloadStep {
   label: string;
@@ -37,6 +92,8 @@ export default function DownloadPage() {
   const [steps, setSteps] = useState<DownloadStep[]>([]);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [freeTrialUsed, setFreeTrialUsed] = useState(true);
+  const [designReviewEligible, setDesignReviewEligible] = useState(false);
+  const [replayKeys, setReplayKeys] = useState<number[]>([]);
   const rendererRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -56,13 +113,22 @@ export default function DownloadPage() {
     setProductName(data.productName ?? "상세페이지");
     if (data.designResult?.sections?.length) {
       setSections(data.designResult.sections);
+      setReplayKeys(new Array(data.designResult.sections.length).fill(0));
     }
-    // users 컬렉션에서 freeTrialUsed 조회
-    const userSnap = await getDoc(doc(db, "users", user!.uid));
-    if (userSnap.exists()) {
-      setFreeTrialUsed(userSnap.data().freeTrialUsed === true);
-    } else {
+    // users 컬렉션에서 freeTrialUsed / 디자인 후기 작성 여부 조회
+    if (isAdminEmail(user!.email)) {
       setFreeTrialUsed(false);
+      setDesignReviewEligible(false);
+    } else {
+      const userSnap = await getDoc(doc(db, "users", user!.uid));
+      if (userSnap.exists()) {
+        setFreeTrialUsed(userSnap.data().freeTrialUsed === true);
+        const designReviewDone = userSnap.data().designReviewDone === true;
+        setDesignReviewEligible(!designReviewDone && !wasReviewSkippedRecently("design"));
+      } else {
+        setFreeTrialUsed(false);
+        setDesignReviewEligible(!wasReviewSkippedRecently("design"));
+      }
     }
     try {
       const saved = sessionStorage.getItem(UPLOAD_KEY);
@@ -81,8 +147,8 @@ export default function DownloadPage() {
   }
 
   async function handleDownloadClick() {
-    // 무료 체험 미사용자 → 후기 모달 먼저
-    if (!freeTrialUsed) {
+    // 무료 체험 미사용자 또는 디자인 후기 미작성자 → 후기 모달 먼저
+    if (!freeTrialUsed || designReviewEligible) {
       setShowReviewModal(true);
       return;
     }
@@ -92,16 +158,22 @@ export default function DownloadPage() {
   async function handleReviewSubmit(star: number, text: string) {
     setShowReviewModal(false);
     if (user) {
-      await saveReview(user.uid, star, text).catch(() => {});
-      await markFreeTrialUsed(user.uid).catch(() => {});
-      setFreeTrialUsed(true);
+      await saveReview(user.uid, star, text, "design", sessionId).catch(() => {});
+      await markReviewDone(user.uid, "design").catch(() => {});
+      setDesignReviewEligible(false);
+      if (!freeTrialUsed && !isAdminEmail(user.email)) {
+        await markFreeTrialUsed(user.uid).catch(() => {});
+        setFreeTrialUsed(true);
+      }
     }
     await runDownload();
   }
 
   async function handleReviewSkip() {
     setShowReviewModal(false);
-    if (user) {
+    markReviewSkipped("design");
+    setDesignReviewEligible(false);
+    if (user && !freeTrialUsed && !isAdminEmail(user.email)) {
       await markFreeTrialUsed(user.uid).catch(() => {});
       setFreeTrialUsed(true);
     }
@@ -151,21 +223,26 @@ export default function DownloadPage() {
         const hasMotion = !!section?.motionTemplate;
 
         if (hasMotion) {
-          // GIF: capture ~15 frames over 900ms
+          // 모션을 처음부터 다시 재생시켜, GIF 프레임 캡처 중에 실제로 움직이는 모습을 담는다.
+          setReplayKeys((prev) => prev.map((v, idx) => (idx === i ? v + 1 : v)));
+          await new Promise((r) => setTimeout(r, 200));
+
+          // GIF: capture ~10 frames over 800ms
           const GIF = (await import("gif.js")).default;
           const gif = new GIF({
             workers: 2,
-            quality: 8,
+            quality: 10,
             width: el.offsetWidth,
             height: el.offsetHeight,
             workerScript: "/gif.worker.js",
-          });
+            globalPalette: true,
+          } as ConstructorParameters<typeof GIF>[0]);
 
           // Frame capture loop
-          for (let f = 0; f < 15; f++) {
-            await new Promise((r) => setTimeout(r, 60));
-            const canvas = await html2canvas(el, { scale: 1.5, useCORS: true, logging: false });
-            gif.addFrame(canvas, { delay: 60, copy: true });
+          for (let f = 0; f < 10; f++) {
+            await new Promise((r) => setTimeout(r, 80));
+            const canvas = await html2canvas(el, { scale: 1, useCORS: true, logging: false, onclone: fixModernColors });
+            gif.addFrame(canvas, { delay: 80, copy: true });
           }
 
           await new Promise<void>((resolve) => {
@@ -178,7 +255,7 @@ export default function DownloadPage() {
           });
         } else {
           // PNG: single capture
-          const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false });
+          const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false, onclone: fixModernColors });
           const blob = await new Promise<Blob>((resolve) =>
             canvas.toBlob((b) => resolve(b!), "image/png")
           );
@@ -192,7 +269,7 @@ export default function DownloadPage() {
         console.error(`Section ${i + 1} capture error:`, err);
         // fallback: PNG only
         try {
-          const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false });
+          const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false, onclone: fixModernColors });
           const blob = await new Promise<Blob>((resolve) =>
             canvas.toBlob((b) => resolve(b!), "image/png")
           );
@@ -248,6 +325,10 @@ export default function DownloadPage() {
         <ReviewModal
           onSubmit={handleReviewSubmit}
           onSkip={handleReviewSkip}
+          title="디자인 완성, 어떠셨나요?"
+          description={"완성된 디자인에 대한 솔직한 후기를 들려주세요.\n서비스 개선에 큰 도움이 됩니다."}
+          submitLabel="후기 남기고 다운로드"
+          skipLabel="건너뛰고 다운로드"
         />
       )}
       {/* 헤더 */}
@@ -359,6 +440,7 @@ export default function DownloadPage() {
                       fontChoice={fontChoice}
                       assets={assets}
                       motionEnabled={true}
+                      replayKey={replayKeys[i]}
                     />
                     <div className="h-px bg-black/5" />
                   </div>

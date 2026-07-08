@@ -18,6 +18,10 @@ interface DesignRendererProps {
   fontChoice: string;
   assets: Record<string, string>;
   motionEnabled?: boolean;
+  /** 값이 바뀔 때마다 모션을 처음부터 다시 재생 (GIF 캡처용) */
+  replayKey?: number;
+  /** true이면 모션 애니메이션 무한 반복 재생 (공유 링크용) */
+  infiniteMotion?: boolean;
 }
 
 export function DesignRenderer({
@@ -26,6 +30,8 @@ export function DesignRenderer({
   fontChoice,
   assets,
   motionEnabled = true,
+  replayKey,
+  infiniteMotion = false,
 }: DesignRendererProps) {
   const tone: ToneConfig = getToneById(toneId) ?? {
     id: "minimal",
@@ -54,7 +60,7 @@ export function DesignRenderer({
             ? (assets[`placeholder_${section.imageSlotIndex}`] ?? null)
             : null;
 
-        const commonProps = { section, tone, fontFamily, imageUrl, motionEnabled };
+        const commonProps = { section, tone, fontFamily, imageUrl, motionEnabled, replayKey, infinite: infiniteMotion };
 
         switch (section.layout) {
           case "full-wide":

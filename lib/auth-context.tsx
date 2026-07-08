@@ -16,6 +16,7 @@ import {
 } from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import { isAdminEmail } from "./admin";
 
 interface AuthContextType {
   user: User | null;
@@ -34,7 +35,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [freeTrialUsed, setFreeTrialUsed] = useState(false);
 
-  async function fetchUserData(uid: string) {
+  async function fetchUserData(uid: string, email?: string | null) {
+    if (isAdminEmail(email)) {
+      setFreeTrialUsed(false);
+      return;
+    }
     const snap = await getDoc(doc(db, "users", uid));
     if (snap.exists()) {
       setFreeTrialUsed(snap.data().freeTrialUsed ?? false);
@@ -44,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
-      if (u) await fetchUserData(u.uid);
+      if (u) await fetchUserData(u.uid, u.email);
       setLoading(false);
     });
     return unsub;
@@ -70,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function refreshUserData() {
-    if (user) await fetchUserData(user.uid);
+    if (user) await fetchUserData(user.uid, user.email);
   }
 
   return (
