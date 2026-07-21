@@ -24,14 +24,75 @@ const IMAGE_LINE_RE = /^\s*\(([^)]+)\)\s*$/;
 
 // ─── 전처리 ─────────────────────────────────────────────────────────────────
 
+// 실제 콘티 출력 포맷(system-prompt.ts E.0 / F.1-2): "## 제목" 3줄 → "**핵심
+// 카피:**" 한 줄 → 그 뒤로 도입부/본론부/결론부가 "---" 구분선으로 나뉘고,
+// 각 섹션은 "기획 의도"를 "> " 인용문 블록으로 먼저 쓴 다음 실제 콘티 본문이
+// 이어진다. 제목·핵심 카피·기획 의도는 전략 설명용 메타 텍스트일 뿐 실제
+// 판매 카피가 아니므로 디자인 생성 입력에 절대 포함되면 안 된다.
+// (이전에는 "## 도입부 기획 의도" 같은, 실제로는 존재하지 않는 헤더를 찾는
+// 로직을 썼다가 매번 매칭에 실패해 원문 전체가 그대로 디자인에 새어나갔다.)
+function stripMetaFromConti(contiText: string): string {
+  const lines = contiText.split("\n");
+
+  // 첫 "> " 줄(도입부 기획 의도 시작) 이전은 전부 제목/핵심 카피 영역이므로 제외한다.
+  const firstQuoteIdx = lines.findIndex((l) => l.trim().startsWith(">"));
+  const bodyLines = firstQuoteIdx >= 0 ? lines.slice(firstQuoteIdx) : lines;
+
+  // "---" 구분선 기준으로 도입부/본론부/결론부 3섹션으로 나눈다.
+  const segments: string[][] = [[]];
+  for (const line of bodyLines) {
+    if (line.trim() === "---") {
+      segments.push([]);
+    } else {
+      segments[segments.length - 1].push(line);
+    }
+  }
+
+  function extractContent(segLines: string[]): string {
+    const contentLines: string[] = [];
+    let inIntent = false;
+    let intentDone = false;
+
+    for (const line of segLines) {
+      const trimmed = line.trim();
+
+      if (!intentDone && trimmed.startsWith(">")) {
+        inIntent = true;
+        continue;
+      }
+      // 인용문 블록 안의 빈 줄은 구분자가 아니라 블록의 일부로 취급한다.
+      if (inIntent && trimmed === "") continue;
+      if (inIntent && !trimmed.startsWith(">")) {
+        inIntent = false;
+        intentDone = true;
+      }
+      // AI가 지침을 놓치고 제목·핵심카피를 본문 중간에 다시 쓰는 경우 방지.
+      if (trimmed.startsWith("## ") || trimmed.startsWith("**핵심 카피:**")) continue;
+
+      contentLines.push(line);
+    }
+
+    return contentLines.join("\n").trim();
+  }
+
+  const [introSeg = [], mainSeg = [], conclusionSeg = []] = segments;
+  const combined = [extractContent(introSeg), extractContent(mainSeg), extractContent(conclusionSeg)]
+    .filter((c) => c.length > 0)
+    .join("\n\n---\n\n");
+
+  // "> " 블록을 하나도 못 찾은 경우(예상 밖 포맷)에는 완전 누락보다 원문을
+  // 그대로 쓰는 편이 안전하다.
+  return combined || contiText;
+}
+
 function preprocessConti(contiText: string): { processedText: string; slotIds: string[] } {
-  const allLines = contiText.split("\n");
-  const introIdx = allLines.findIndex((l) => /^#{1,6}.*도입부/.test(l.trim()));
-  const lines = introIdx >= 0 ? allLines.slice(introIdx) : allLines;
+  const sourceText = stripMetaFromConti(contiText);
+
+  const allLines = sourceText.split("\n");
 
   let slotCounter = 0;
   const slotIds: string[] = [];
-  const processedLines = lines.map((line) => {
+  const processedLines = allLines.map((line) => {
     const m = IMAGE_LINE_RE.exec(line);
     if (m) {
       const id = `placeholder_${slotCounter++}`;
@@ -122,22 +183,275 @@ function getFontSizeGuide(toneId: string): string {
 
 const SHARED_CSS_CLASSES = `
 SHARED CSS CLASS VOCABULARY (use these names consistently — second-pass sections reuse them):
-.s-hero       full-width hero with image + text overlay
-.s-hero-img   <img> inside hero (position:absolute, cover, full size)
-.s-hero-text  text overlay (position:absolute, bottom/center, with padding)
-.s-feature    feature item section (01/02/03 numbered)
-.s-bignum     decorative background number (opacity:0.08, 120-150px, position:absolute)
-.s-stat       large stat callout (80-120px number)
-.s-card       general content card
-.s-cta        CTA/closing section
-.s-alt        alternate background shade
-.anim-fade    fadeUp animation (0.7s, fill:both)
-.anim-zoom    zoomIn animation (0.7s, fill:both)
-.badge        small accent pill
-.accent-bar   left accent border bar
+.s-hero        full-width hero with image + text overlay
+.s-hero-img    <img> inside hero (position:absolute, cover, full size)
+.s-hero-text   text overlay inside hero (position:absolute, bottom/center, with padding)
+.s-feature     feature item section (01/02/03 numbered)
+.s-split       split/two-column section container (side-by-side flex layout)
+.s-split-img   image element inside split section (width:50%, rounded, cover)
+.s-split-text  text block container inside split section
+.s-card        general content card
+.s-grid        grid layout container (2-3 columns on desktop, 1 column on mobile)
+.s-cta         CTA/closing section
+.s-stat        large stat callout (80-120px number)
+.s-bignum      decorative background number (opacity:0.08, 120-150px, position:absolute)
+.s-alt         alternate background shade
+.anim-fade     fadeUp animation (0.7s, fill:both)
+.anim-zoom     zoomIn animation (0.7s, fill:both)
+.badge         small accent pill
+.accent-bar    left accent border bar
 `.trim();
 
-function buildToneHeader(tone: ToneConfig, importCss: string, fontFamily: string): string {
+function getPredefinedCss(tone: ToneConfig, fontFamily: string): string {
+  let typographyCss = "";
+  if (tone.id === "emotional") {
+    typographyCss = `
+section p {
+  font-size: clamp(28px, 5.5vw, 44px);
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+}
+    `;
+  } else if (tone.id === "cinematic") {
+    typographyCss = `
+section p {
+  font-size: clamp(32px, 6vw, 52px);
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+strong {
+  background: linear-gradient(135deg, var(--accent) 0%, #3b82f6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--accent);
+}
+    `;
+  } else if (tone.id === "impact") {
+    typographyCss = `
+section p {
+  font-size: clamp(32px, 6vw, 52px);
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+    `;
+  } else if (tone.id === "premium") {
+    typographyCss = `
+section p {
+  font-size: clamp(22px, 4.5vw, 36px);
+  font-weight: 400;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
+}
+    `;
+  } else { // minimal
+    typographyCss = `
+section p {
+  font-size: clamp(18px, 3.5vw, 26px);
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+}
+h1, h2, h3, .s-headline {
+  font-size: clamp(24px, 5vw, 40px);
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.35;
+}
+    `;
+  }
+
+  return `
+/* Base Structure */
+section {
+  position: relative;
+  padding: 80px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  overflow: hidden;
+}
+section.s-alt {
+  background-color: color-mix(in srgb, var(--accent) 4%, var(--bg));
+}
+
+/* Typography Specifics */
+${typographyCss}
+
+section p.small, section p.desc, section p.label, section p.s-small {
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  line-height: 1.5 !important;
+  opacity: 0.6 !important;
+}
+
+/* Hero Section */
+.s-hero {
+  position: relative;
+  padding: 0;
+  min-height: 520px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.s-hero-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+}
+.s-hero-text {
+  position: relative;
+  z-index: 2;
+  padding: 48px 24px 80px 24px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.4) 60%, transparent 100%);
+}
+.s-hero-text, .s-hero-text * {
+  color: #ffffff !important;
+}
+.s-hero-text strong {
+  color: var(--accent) !important;
+}
+
+/* Split Section */
+.s-split {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 32px;
+  padding: 60px 24px;
+}
+.s-split-reverse {
+  flex-direction: row-reverse;
+}
+.s-split > * {
+  flex: 1;
+  min-width: 0;
+}
+.s-split-img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1/1;
+  object-fit: cover;
+  border-radius: 16px;
+  display: block;
+}
+.s-split-text {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+@media (max-width: 640px) {
+  .s-split, .s-split-reverse {
+    flex-direction: column;
+    gap: 24px;
+  }
+  .s-split-img {
+    aspect-ratio: 4/3;
+  }
+}
+
+/* Grid Section */
+.s-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  width: 100%;
+}
+
+/* General Content Card */
+.s-card {
+  background: color-mix(in srgb, var(--text) 3%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  border-radius: 20px;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.s-card:hover {
+  transform: translateY(-2px);
+}
+.s-card .slot {
+  border-radius: 12px;
+  aspect-ratio: 16/10;
+  object-fit: cover;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+/* Feature Section */
+.s-feature {
+  padding: 60px 24px;
+}
+
+/* CTA / Closing Section */
+.s-cta {
+  text-align: center;
+  padding: 100px 24px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+  align-items: center;
+  justify-content: center;
+}
+
+/* Large Stat Callout */
+.s-stat {
+  font-size: clamp(64px, 14vw, 110px);
+  font-weight: 900;
+  color: var(--accent);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-family: sans-serif;
+}
+
+/* Decorative Background Number */
+.s-bignum {
+  position: absolute;
+  right: 24px;
+  top: 16px;
+  font-size: 140px;
+  font-weight: 900;
+  color: var(--accent);
+  opacity: 0.07;
+  line-height: 1;
+  pointer-events: none;
+  font-family: sans-serif;
+}
+
+/* Utility Elements */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: 9999px;
+  width: fit-content;
+}
+.accent-bar {
+  width: 44px;
+  height: 4px;
+  background-color: var(--accent);
+  border-radius: 2px;
+}
+.anim-fade {
+  animation: fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.anim-zoom {
+  animation: zoomIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+  `.trim();
+}
+
+function buildToneHeader(tone: ToneConfig, fontFamily: string): string {
   return `World-class Korean e-commerce detail page designer for Wadiz crowdfunding.
 
 TONE: ${tone.name} / ${tone.mood}
@@ -146,6 +460,8 @@ Font: ${fontFamily}
 
 CRITICAL: ALL CSS in one <style> block. NEVER use style="" attributes.
 IMAGE SLOTS: [IMAGE:placeholder_N|desc] → <img class="slot" data-slot="placeholder_N" src="" alt="">
+- CRITICAL: The description ('desc') must ONLY be used as the 'alt' attribute of the img tag.
+- NEVER render the 'desc' text as visible HTML text (such as text labels, captions, <p>, or <span> tags) under or near the image.
 BOLD: **text** → <strong>text</strong>
 SECTION STRUCTURE: <section id="section-N"> (one per topic/image/feature-point)
 
@@ -159,7 +475,8 @@ ${getFontSizeGuide(tone.id)}
 STRICT CONTENT RULE: Use ONLY the text provided in CONTENT below.
 - Do NOT invent, add, or embellish any copy, branding, slogans, badges, or labels not explicitly written in CONTENT.
 - Do NOT add "×", collaboration names, platform badges (e.g. "슈퍼메이커", "와디즈 추천"), certifications, award labels, or any promotional text unless it appears verbatim in CONTENT.
-- Do NOT add decorative intro phrases like "쉔코리아 × 와디즈" or similar brand mashups.`;
+- Do NOT add decorative intro phrases like "쉔코리아 × 와디즈" or similar brand mashups.
+- To write secondary small text (fine print, label, disclaimer), wrap it in <p class="small"> or <p class="desc"> (16px).`;
 }
 
 // ─── 1차 패스: 완전한 HTML 문서 ──────────────────────────────────────────────
@@ -173,54 +490,53 @@ async function generateFirstPass(
   allSlotIds: string[],
   startSectionN: number
 ): Promise<string> {
-  const prompt = `${buildToneHeader(tone, importCss, fontFamily)}
+  const predefinedCss = getPredefinedCss(tone, fontFamily);
+  const systemText = `${buildToneHeader(tone, fontFamily)}
 
 Generate a COMPLETE HTML document for PART 1 of the product page.
 
-HEAD TEMPLATE — copy this exactly, then add your CSS classes inside the <style>:
+HEAD TEMPLATE — copy this exactly, then you can add your own custom CSS overrides/classes inside the <style> if needed:
 <!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 ${importCss}
-:root{--bg:${tone.background};--text:${tone.textColor};--accent:${tone.accentColor}}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:${fontFamily};background:var(--bg);color:var(--text);max-width:750px;margin:0 auto;word-break:keep-all;overflow-wrap:break-word}
-strong{color:var(--accent)}
-img.slot{width:100%;display:block;object-fit:cover}
-@keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
-@keyframes zoomIn{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}
-/* YOUR CSS CLASSES BELOW — keep total <style> under 80 lines, no CSS comments */
+${predefinedCss}
+/* YOUR CUSTOM CSS CLASSES/OVERRIDES BELOW (IF ANY) — keep total custom CSS under 50 lines, no CSS comments */
 </style>
 </head>
 <body>
 
 ${SHARED_CSS_CLASSES}
 
-CSS BUDGET: Keep <style> UNDER 80 LINES TOTAL (including the base styles above).
+CSS BUDGET: Predefined layout and typography classes are already included. You may add your own custom CSS classes or overrides below (keep custom CSS under 50 lines total, no CSS comments).
 Use shorthand. Reuse classes. Second-pass sections will inherit all classes defined here.
 
-SECTION IDs: start from section-${startSectionN}
 DESIGN:
 - Hero section: full-width image with overlaid headline (absolute positioning via .s-hero classes)
-- Stats: 80-120px numbers
-- Features: giant decorative background number (0.08 opacity) using .s-bignum
+- Stats: 80-120px numbers using .s-stat
+- Features: giant decorative background number (0.08 opacity) using .s-bignum using .s-feature classes
 - Alternate backgrounds: every other section uses .s-alt
 - Accent color for badges, borders, underlines
+
+End with </body></html>. Return ONLY the HTML document. No markdown fences.`;
+
+  const userText = `SECTION IDs: start from section-${startSectionN}
 
 CONTENT FOR THIS PART:
 ${textChunk}
 
 Slots in this part: ${chunkSlotIds.join(", ")}
-All slots in document: ${allSlotIds.join(", ")}
-
-End with </body></html>. Return ONLY the HTML document. No markdown fences.`;
+All slots in document: ${allSlotIds.join(", ")}`;
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 8192,
-    messages: [{ role: "user", content: prompt }],
+    system: [
+      { type: "text", text: systemText, cache_control: { type: "ephemeral" } },
+    ],
+    messages: [{ role: "user", content: userText }],
   });
 
   if (response.stop_reason === "max_tokens") {
@@ -242,23 +558,26 @@ async function generateSubsequentPass(
 ): Promise<string> {
   if (!textChunk.trim()) return "";
 
-  const prompt = `You are generating ADDITIONAL SECTIONS for a Korean product detail page (Part ${passIndex + 1}).
+  const systemText = `You are generating ADDITIONAL SECTIONS for a Korean product detail page.
 
 OUTPUT RULES:
 - Output ONLY raw <section id="section-N">...</section> blocks
 - Do NOT output DOCTYPE, html, head, body, or style tags
-- Section IDs start at section-${startSectionN} and increment
 - Use the SAME CSS classes defined in Part 1: ${SHARED_CSS_CLASSES}
 - Do NOT add any new <style> block
 - ALL images: <img class="slot" data-slot="placeholder_N" src="" alt="">
+- CRITICAL: Never output the 'desc' description as visible text on the screen. It must only reside in the 'alt' attribute.
 - **text** → <strong>text</strong>
 - No inline style="" attributes
 - STRICT CONTENT RULE: Use ONLY text from CONTENT below. Do NOT invent branding, badges, slogans, collaboration names, or any copy not explicitly in CONTENT.
 - LINE BREAKS (STRICT): Preserve every line break in CONTENT literally (one CONTENT line = one rendered line, e.g. via <br>). Never merge two CONTENT lines into one sentence, and never let CSS word-wrap split a single CONTENT line across two rows — shrink font-size instead.
+- To write secondary small text (fine print, label, disclaimer), wrap it in <p class="small"> or <p class="desc"> (16px).
 
 ${getFontSizeGuide(tone.id)}
 
-TONE VARS (already in CSS): --bg:${tone.background} --text:${tone.textColor} --accent:${tone.accentColor}
+TONE VARS (already in CSS): --bg:${tone.background} --text:${tone.textColor} --accent:${tone.accentColor}`;
+
+  const userText = `Part ${passIndex + 1}. Section IDs start at section-${startSectionN} and increment.
 
 CONTENT:
 ${textChunk}
@@ -270,7 +589,10 @@ Return ONLY the <section> elements. No explanation. No markdown fences.`;
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 8192,
-    messages: [{ role: "user", content: prompt }],
+    system: [
+      { type: "text", text: systemText, cache_control: { type: "ephemeral" } },
+    ],
+    messages: [{ role: "user", content: userText }],
   });
 
   if (response.stop_reason === "max_tokens") {
@@ -315,6 +637,7 @@ export async function generateHtmlDesign(
   const textChunks = splitTextBySlots(processedText, slotChunks);
 
   console.log(`[html-design-ai] slots=${slotIds.length}, passes=${slotChunks.length}`);
+  console.log(`[html-design-ai][DEBUG] processedText head:\n${processedText.slice(0, 400)}`);
 
   // ── 1차 패스: 완전한 HTML 문서 ──
   const firstHtml = await generateFirstPass(
@@ -374,13 +697,13 @@ export async function editSectionHtml(
   const tone = getToneById(toneId);
   const accentColor = tone?.accentColor ?? "#000000";
 
-  const prompt = `You are editing one section of a Korean product detail page.
+  const systemText = `You are editing one section of a Korean product detail page.
 
 Apply the instruction. Preserve HTML structure, CSS classes, IDs, and data-slot attributes unless asked to change them.
 BOLD: **text** → <strong style="color:${accentColor}">text</strong>
-No new style="" attributes. No new <style> blocks.
+No new style="" attributes. No new <style> blocks.`;
 
-CURRENT SECTION:
+  const userText = `CURRENT SECTION:
 ${sectionHtml}
 
 INSTRUCTION: "${instruction}"
@@ -390,7 +713,10 @@ Return ONLY the updated <section>...</section>. No explanation. No markdown fenc
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 4096,
-    messages: [{ role: "user", content: prompt }],
+    system: [
+      { type: "text", text: systemText, cache_control: { type: "ephemeral" } },
+    ],
+    messages: [{ role: "user", content: userText }],
   });
 
   const raw = response.content[0].type === "text" ? response.content[0].text : "";
