@@ -195,6 +195,7 @@ export function parseSections(rawText: string) {
   let coreCopy = "";
   let currentSection = "";
   let currentType = "";
+  let hasSeenSeparator = false;
 
   const sections: Record<string, Record<string, string[]>> = {
     intro: { intent: [], content: [] },
@@ -202,25 +203,28 @@ export function parseSections(rawText: string) {
     conclusion: { intent: [], content: [] },
   };
 
+  const isHeaderCandidate = (clean: string, keyword: string) => {
+    return clean.startsWith(keyword) && clean.length <= keyword.length + 5;
+  };
+
   for (const line of rawText.split("\n")) {
     const trimmed = line.trim();
 
-    // 섹션 헤더 판별을 제목 후보 수집보다 먼저 검사해야 한다. "## 도입부 기획
-    // 의도"·"## 도입부 콘티" 같은 섹션 헤더도 "## "로 시작하므로, 순서가
-    // 바뀌면 섹션 헤더 자체가 제목 후보로 잘못 수집되고 currentSection이
-    // 끝까지 설정되지 않아 본문 파싱 전체가 깨진다.
-    if (trimmed.includes("도입부 기획 의도")) { currentSection = "intro"; currentType = "intent"; continue; }
-    if (trimmed.includes("도입부 콘티")) { currentSection = "intro"; currentType = "content"; continue; }
-    if (trimmed.includes("본론부 기획 의도")) { currentSection = "main"; currentType = "intent"; continue; }
-    if (trimmed.includes("본론부 콘티")) { currentSection = "main"; currentType = "content"; continue; }
-    if (trimmed.includes("결론부 기획 의도")) { currentSection = "conclusion"; currentType = "intent"; continue; }
-    if (trimmed.includes("결론부 콘티")) { currentSection = "conclusion"; currentType = "content"; continue; }
+    // 마크다운 문법(>, #, *, _, -)과 공백을 모두 제거한 상태로 비교
+    const clean = trimmed.replace(/[#*_\s>\-]/g, "");
 
-    // 프로젝트 제목 후보 3개는 "## " 헤딩으로 한 줄씩 연속 등장한다(위 섹션
-    // 헤더 중 하나가 나오기 전까지만). 제목 영역은 마크다운 렌더링 없이
-    // 그대로 화면에 출력되므로, AI가 지침을 놓치고 **볼드** 마크을 넣더라도
-    // 별표가 그대로 노출되지 않도록 제거한다.
-    if (trimmed.startsWith("## ") && !currentSection) {
+    // 섹션 헤더 판별을 제목 후보 수집보다 먼저 검사해야 한다.
+    if (isHeaderCandidate(clean, "도입부기획의도")) { currentSection = "intro"; currentType = "intent"; continue; }
+    if (isHeaderCandidate(clean, "본론부기획의도")) { currentSection = "main"; currentType = "intent"; continue; }
+    if (isHeaderCandidate(clean, "결론부기획의도")) { currentSection = "conclusion"; currentType = "intent"; continue; }
+
+    if (isHeaderCandidate(clean, "도입부콘티") || isHeaderCandidate(clean, "도입부본문") || (isHeaderCandidate(clean, "도입부") && !clean.includes("의도"))) { currentSection = "intro"; currentType = "content"; continue; }
+    if (isHeaderCandidate(clean, "본론부콘티") || isHeaderCandidate(clean, "본론부본문") || (isHeaderCandidate(clean, "본론부") && !clean.includes("의도"))) { currentSection = "main"; currentType = "content"; continue; }
+    if (isHeaderCandidate(clean, "결론부콘티") || isHeaderCandidate(clean, "결론부본문") || (isHeaderCandidate(clean, "결론부") && !clean.includes("의도"))) { currentSection = "conclusion"; currentType = "content"; continue; }
+
+    // 프로젝트 제목 후보 3개는 처음에 등장하는 "## " 헤딩만 수집한다.
+    // 핵심 카피가 설정되었거나, 구분선(---)을 만난 적이 있거나, 이미 5개 이상 가져왔다면 수집하지 않는다.
+    if (trimmed.startsWith("## ") && !currentSection && !coreCopy && !hasSeenSeparator && projectTitles.length < 5) {
       projectTitles.push(trimmed.replace(/^##\s+/, "").replace(/\*\*/g, "").trim());
       continue;
     }
@@ -228,12 +232,18 @@ export function parseSections(rawText: string) {
       coreCopy = trimmed.replace("**핵심 카피:**", "").trim();
       continue;
     }
-    if (trimmed === "---") continue;
+    if (trimmed === "---") {
+      hasSeenSeparator = true;
+      // 기획 의도를 수집하는 도중에 구분선(---)을 만나면 자동으로 콘티 본문 수집 상태로 전환
+      if (currentSection && currentType === "intent") {
+        currentType = "content";
+      }
+      continue;
+    }
 
     // AI가 지침을 놓치고 제목·핵심카피 블록을 본문 중간에 다시 한번 쓰는
     // 경우가 있다. 섹션이 이미 시작된 뒤에 나타나는 "## " 헤딩이나
-    // "**핵심 카피:**" 줄은 정상적인 본문에 나올 수 없는 형태이므로,
-    // 화면에 그대로(마크다운 미변환 텍스트로) 노출되지 않도록 무시한다.
+    // "**핵심 카피:**" 줄은 정상적인 본문에 나올 수 없는 형태이므로 무시한다.
     if (currentSection && (trimmed.startsWith("## ") || trimmed.startsWith("**핵심 카피:**"))) {
       continue;
     }
