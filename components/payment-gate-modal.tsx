@@ -30,7 +30,7 @@ export function PaymentGateModal({ onClose }: PaymentGateModalProps) {
           <div className="bg-purple-50 border border-purple-100 rounded-xl p-4 flex items-center justify-between">
             <div>
               <div className="font-bold text-gray-900 text-sm">디자인 자동화</div>
-              <div className="text-xs text-gray-500 mt-0.5">AI 디자인 생성 + 섹션 재생성 30회</div>
+              <div className="text-xs text-gray-500 mt-0.5">디자인 생성 + 섹션 재생성 30회</div>
             </div>
             <div className="text-purple-600 font-black text-lg">100,000원</div>
           </div>

@@ -221,8 +221,8 @@ export default function LandingPage() {
               },
               {
                 step: "02",
-                title: "AI 콘티 생성",
-                desc: "AI가 도입·본론·결론 카피와 이미지 자리를 자동으로 기획합니다",
+                title: "콘티 생성",
+                desc: "도입·본론·결론 카피와 이미지 자리를 자동으로 기획합니다",
                 icon: "✦",
               },
               {
@@ -234,7 +234,7 @@ export default function LandingPage() {
               {
                 step: "04",
                 title: "상세페이지\n디자인 생성",
-                desc: "AI가 레이아웃과 모션을 자동 조합해 PNG·GIF 파일로 완성합니다",
+                desc: "레이아웃과 모션을 자동 조합해 PNG·GIF 파일로 완성합니다",
                 icon: "⚡",
               },
             ].map((item, i, arr) => (
@@ -269,8 +269,8 @@ export default function LandingPage() {
               },
               {
                 step: "02",
-                title: "AI 콘티 생성",
-                desc: "AI가 도입·본론·결론 카피와 이미지 자리를 자동으로 기획합니다",
+                title: "콘티 생성",
+                desc: "도입·본론·결론 카피와 이미지 자리를 자동으로 기획합니다",
                 icon: "✦",
               },
               {
@@ -282,7 +282,7 @@ export default function LandingPage() {
               {
                 step: "04",
                 title: "상세페이지 디자인 생성",
-                desc: "AI가 레이아웃과 모션을 자동 조합해 PNG·GIF 파일로 완성합니다",
+                desc: "레이아웃과 모션을 자동 조합해 PNG·GIF 파일로 완성합니다",
                 icon: "⚡",
               },
             ].map((item, i, arr) => (
@@ -346,7 +346,7 @@ export default function LandingPage() {
                       <div className="bg-gray-900 px-4 py-2.5 text-white font-bold text-sm">{row.label}</div>
                       <div className="grid grid-cols-2">
                         <div className="bg-gray-50 p-3 border-r border-gray-200">
-                          <div className="text-xs font-bold text-gray-400 mb-1">타 AI / 일반 외주</div>
+                          <div className="text-xs font-bold text-gray-400 mb-1">타 서비스 / 일반 외주</div>
                           <p className="text-xs text-gray-500"><span className="text-red-400 mr-1">✕</span>{row.bad}</p>
                         </div>
                         <div className="bg-blue-600 p-3">
@@ -363,7 +363,7 @@ export default function LandingPage() {
                   <div className="grid grid-cols-3">
                     <div className="bg-gray-900 p-5"></div>
                     <div className="bg-gray-100 p-5 text-center font-bold text-gray-700 text-sm border-l border-gray-200">
-                      타 AI 서비스 / 일반 외주
+                      타 서비스 / 일반 외주
                     </div>
                     <div className="bg-blue-600 p-5 text-center font-bold text-white text-sm">
                       상세페이지의 정석
@@ -433,12 +433,12 @@ export default function LandingPage() {
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-blue-100 overflow-y-auto max-h-[480px]">
               <div className="flex items-center gap-2 mb-5">
                 <span className="text-lg">✦</span>
-                <span className="font-bold text-gray-900">AI 생성 콘티 예시</span>
+                <span className="font-bold text-gray-900">자동 생성 콘티 예시</span>
                 <span className="text-xs text-gray-400 ml-auto">실제 출력 샘플</span>
               </div>
               <div className="space-y-4">
                 <div className="bg-blue-50 rounded-xl p-3 text-center">
-                  <p className="text-xs text-blue-600 font-semibold">실제 AI 콘티는 A4 3~4페이지 분량으로 더 상세하게 생성됩니다</p>
+                  <p className="text-xs text-blue-600 font-semibold">실제 콘티는 A4 3~4페이지 분량으로 더 상세하게 생성됩니다</p>
                 </div>
                 {DEMO_CONTI.map((block) => (
                   <div key={block.section} className="border border-gray-100 rounded-xl overflow-hidden">
