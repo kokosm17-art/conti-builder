@@ -197,6 +197,7 @@ SHARED CSS CLASS VOCABULARY (use these names consistently — second-pass sectio
 .anim-zoom     zoomIn animation (0.7s, fill:both)
 .badge         small accent pill
 .accent-bar    small decorative bar ONLY (44px×4px fixed size) — NEVER put text/image inside it or use it as a content wrapper. Always use it standalone and empty: <div class="accent-bar"></div>
+.i-divider     short vertical pause divider (2px×32px, centered). A standalone "I" line in CONTENT is NOT the letter I — it marks a rhythm break. Render it as <div class="i-divider"></div>, never as visible text "I".
 `.trim();
 
 function getPredefinedCss(tone: ToneConfig, fontFamily: string): string {
@@ -269,6 +270,8 @@ section {
   flex-direction: column;
   gap: 24px;
   overflow: hidden;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 section.s-alt {
   background-color: color-mix(in srgb, var(--accent) 4%, var(--bg));
@@ -439,6 +442,13 @@ section p.small, section p.desc, section p.label, section p.s-small {
   background-color: var(--accent);
   border-radius: 2px;
 }
+.i-divider {
+  width: 2px;
+  height: 32px;
+  background-color: var(--accent);
+  opacity: 0.5;
+  margin: 8px auto;
+}
 .anim-fade {
   animation: fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -461,6 +471,7 @@ IMAGE SLOTS: [IMAGE:placeholder_N|desc] → <img class="slot" data-slot="placeho
 - NEVER render the 'desc' text as visible HTML text (such as text labels, captions, <p>, or <span> tags) under or near the image.
 BOLD: **text** → <strong>text</strong>
 SECTION STRUCTURE: <section id="section-N"> (one per topic/image/feature-point)
+"I" DIVIDER: A line that is exactly the single character "I" (nothing else) is a rhythm-pause marker, NOT the letter I. Render it as <div class="i-divider"></div> — never output it as visible text.
 
 LAYOUT (STRICT): NEVER place an image side-by-side with text in a horizontal split (image on one side, text column on the other). Always stack: image above or below the text, full width. This applies to every section, no exceptions.
 
@@ -569,6 +580,7 @@ OUTPUT RULES:
 - **text** → <strong>text</strong>
 - No inline style="" attributes
 - STRICT CONTENT RULE: Use ONLY text from CONTENT below. Do NOT invent branding, badges, slogans, collaboration names, or any copy not explicitly in CONTENT.
+- "I" DIVIDER: A line that is exactly the single character "I" (nothing else) is a rhythm-pause marker, NOT the letter I. Render it as <div class="i-divider"></div> — never output it as visible text.
 - LAYOUT (STRICT): NEVER place an image side-by-side with text in a horizontal split (image on one side, text column on the other). Always stack: image above or below the text, full width. This applies to every section, no exceptions.
 - LINE BREAKS (STRICT): Preserve every line break in CONTENT literally (one CONTENT line = one rendered line, e.g. via <br>). Never merge two CONTENT lines into one sentence, and never let CSS word-wrap split a single CONTENT line across two rows — shrink font-size instead, but never below a readable minimum (e.g. never under 20px for narrative copy).
 - To write secondary small text (fine print, label, disclaimer), wrap it in <p class="small"> or <p class="desc"> (16px).
