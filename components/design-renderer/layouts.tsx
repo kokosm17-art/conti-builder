@@ -227,19 +227,33 @@ function SectionImage({
 // ── 1. 풀와이드 ──────────────────────────────────────────────────────────────
 export function FullWideSection({ section, tone, fontFamily, imageUrl, motionEnabled, replayKey, infinite }: SectionProps) {
   const ar = section.imageAspectRatio;
-  const textColor = imageUrl ? "#FFFFFF" : tone.textColor;
   const overlayClass = getOverlayClass(tone.id);
+
+  // 이미지가 없을 때: 텍스트 → 빈 이미지 슬롯 세로 배치 (겹침 방지)
+  if (!imageUrl) {
+    return (
+      <div className="w-full overflow-hidden" style={{ fontFamily, backgroundColor: tone.background }}>
+        <div className="px-8 py-10">
+          {renderLines(section, tone, motionEnabled, "", { replayKey, infinite })}
+        </div>
+        <div className="w-full" style={ar && ar !== "original" ? { aspectRatio: ar } : ar === "original" ? {} : { height: 400 }}>
+          <SectionImage imageUrl={null} aspectRatio={ar} />
+        </div>
+      </div>
+    );
+  }
+
+  // 이미지가 있을 때: 기존 오버레이 방식 유지
+  const textColor = "#FFFFFF";
 
   if (ar) {
     return (
       <div className="relative w-full overflow-hidden" style={{ fontFamily, backgroundColor: tone.background }}>
         <SectionImage imageUrl={imageUrl} aspectRatio={ar} />
-        {imageUrl && (
-          <div className={`absolute inset-0 ${overlayClass} pointer-events-none`} />
-        )}
+        <div className={`absolute inset-0 ${overlayClass} pointer-events-none`} />
         <div className="absolute inset-0 flex flex-col justify-end px-8 pb-14 pt-12">
           <div className="max-w-md">
-            {renderLines(section, { ...tone, textColor }, motionEnabled, "", { shadow: !!imageUrl, replayKey, infinite })}
+            {renderLines(section, { ...tone, textColor }, motionEnabled, "", { shadow: true, replayKey, infinite })}
           </div>
         </div>
       </div>
@@ -250,13 +264,11 @@ export function FullWideSection({ section, tone, fontFamily, imageUrl, motionEna
     <div className="relative w-full overflow-hidden" style={{ minHeight: 460, fontFamily, backgroundColor: tone.background }}>
       <div className="absolute inset-0">
         <SectionImage imageUrl={imageUrl} />
-        {imageUrl && (
-          <div className={`absolute inset-0 ${overlayClass}`} />
-        )}
+        <div className={`absolute inset-0 ${overlayClass}`} />
       </div>
       <div className="relative z-10 flex flex-col justify-end h-full min-h-[460px] px-8 pb-14 pt-24">
         <div className="max-w-md">
-          {renderLines(section, { ...tone, textColor }, motionEnabled, "", { shadow: !!imageUrl, replayKey, infinite })}
+          {renderLines(section, { ...tone, textColor }, motionEnabled, "", { shadow: true, replayKey, infinite })}
         </div>
       </div>
     </div>
@@ -401,20 +413,38 @@ export function CardGridSection({ section, tone, fontFamily, imageUrl, motionEna
 export function ImageFullSection({ section, tone, fontFamily, imageUrl, motionEnabled, replayKey, infinite }: SectionProps) {
   const hasText = section.textLines.length > 0;
   const ar = section.imageAspectRatio;
-  const textColor = imageUrl ? "#FFFFFF" : tone.textColor;
   const overlayClass = getOverlayClass(tone.id);
+
+  // 이미지가 없을 때: 텍스트(있으면) → 빈 이미지 슬롯 세로 배치 (겹침 방지)
+  if (!imageUrl) {
+    return (
+      <div className="w-full overflow-hidden" style={{ fontFamily, backgroundColor: tone.background }}>
+        {hasText && (
+          <div className="px-8 py-10">
+            {renderLines(section, tone, motionEnabled, "", { replayKey, infinite })}
+          </div>
+        )}
+        <div className="w-full" style={ar && ar !== "original" ? { aspectRatio: ar } : ar === "original" ? {} : { height: 420 }}>
+          <SectionImage imageUrl={null} aspectRatio={ar} />
+        </div>
+      </div>
+    );
+  }
+
+  // 이미지가 있을 때: 기존 오버레이 방식 유지
+  const textColor = "#FFFFFF";
 
   if (ar) {
     return (
       <div className="relative w-full overflow-hidden" style={{ fontFamily, backgroundColor: tone.background }}>
         <SectionImage imageUrl={imageUrl} aspectRatio={ar} />
-        {imageUrl && hasText && (
+        {hasText && (
           <div className={`absolute inset-0 ${overlayClass} pointer-events-none`} />
         )}
         {hasText && (
           <div className="absolute inset-0 px-8 pt-12 flex flex-col justify-start">
             <div className="max-w-md">
-              {renderLines(section, { ...tone, textColor }, motionEnabled, "", { shadow: !!imageUrl, replayKey, infinite })}
+              {renderLines(section, { ...tone, textColor }, motionEnabled, "", { shadow: true, replayKey, infinite })}
             </div>
           </div>
         )}
@@ -426,13 +456,13 @@ export function ImageFullSection({ section, tone, fontFamily, imageUrl, motionEn
     <div className="relative w-full overflow-hidden" style={{ minHeight: 480, fontFamily, backgroundColor: tone.background }}>
       <div className="absolute inset-0">
         <SectionImage imageUrl={imageUrl} />
-        {imageUrl && hasText && (
+        {hasText && (
           <div className={`absolute inset-0 ${overlayClass}`} />
         )}
       </div>
       {hasText && (
         <div className="relative z-10 px-8 pt-12 max-w-md">
-          {renderLines(section, { ...tone, textColor }, motionEnabled, "", { shadow: !!imageUrl, replayKey, infinite })}
+          {renderLines(section, { ...tone, textColor }, motionEnabled, "", { shadow: true, replayKey, infinite })}
         </div>
       )}
     </div>
