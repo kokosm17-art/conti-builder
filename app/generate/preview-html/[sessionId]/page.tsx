@@ -94,9 +94,11 @@ function buildInteractiveHtml(html: string): string {
   const style = domDoc.createElement("style");
   style.id = "ci-overlay-styles";
   style.textContent = `
-    .ci-wrap{position:relative;display:block;cursor:pointer;min-height:280px;overflow:hidden;}
+    .ci-wrap{display:block;cursor:pointer;overflow:hidden;}
+    .ci-wrap.ci-ratio{position:relative;aspect-ratio:4/3;}
+    .ci-wrap.ci-hero{position:absolute;inset:0;}
     .ci-ph{
-      position:absolute;inset:0;min-height:280px;
+      position:absolute;inset:0;
       display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
       background:#f1f2f5;border:2px dashed #c9cdd4;z-index:50;
       transition:background .15s;
@@ -133,10 +135,11 @@ function buildInteractiveHtml(html: string): string {
     const img = el as HTMLImageElement;
     const slotId = img.getAttribute("data-slot") ?? "";
     const desc = img.getAttribute("alt") || "이미지 영역";
+    const isHero = img.classList.contains("s-hero-img");
 
-    // wrapper div
+    // wrapper div — 히어로 이미지는 부모 섹션 전체를 채우고, 나머지는 4:3 비율로 크기 확보
     const wrap = domDoc.createElement("div");
-    wrap.className = "ci-wrap";
+    wrap.className = isHero ? "ci-wrap ci-hero" : "ci-wrap ci-ratio";
     wrap.setAttribute("data-slot-wrap", slotId);
 
     // placeholder overlay
@@ -161,8 +164,8 @@ function buildInteractiveHtml(html: string): string {
     wrap.appendChild(img);
     wrap.appendChild(ph);
     wrap.appendChild(chgBtn);
-    // img는 placeholder 뒤에 있어야 placeholder가 덮을 수 있음
-    img.style.cssText = "width:100%;display:block;object-fit:cover;position:relative;z-index:1;min-height:280px;";
+    // img는 placeholder 뒤에 있어야 placeholder가 덮을 수 있음. wrap(상대/절대 위치 기준)을 항상 꽉 채움
+    img.style.cssText = "width:100%;height:100%;display:block;object-fit:cover;position:absolute;inset:0;z-index:1;";
   });
 
   // 섹션마다 [수정] 버튼 추가

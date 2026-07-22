@@ -187,9 +187,6 @@ SHARED CSS CLASS VOCABULARY (use these names consistently — second-pass sectio
 .s-hero-img    <img> inside hero (position:absolute, cover, full size)
 .s-hero-text   text overlay inside hero (position:absolute, bottom/center, with padding)
 .s-feature     feature item section (01/02/03 numbered)
-.s-split       split/two-column section container (side-by-side flex layout)
-.s-split-img   image element inside split section (width:50%, rounded, cover)
-.s-split-text  text block container inside split section
 .s-card        general content card
 .s-grid        grid layout container (2-3 columns on desktop, 1 column on mobile)
 .s-cta         CTA/closing section
@@ -199,7 +196,7 @@ SHARED CSS CLASS VOCABULARY (use these names consistently — second-pass sectio
 .anim-fade     fadeUp animation (0.7s, fill:both)
 .anim-zoom     zoomIn animation (0.7s, fill:both)
 .badge         small accent pill
-.accent-bar    left accent border bar
+.accent-bar    small decorative bar ONLY (44px×4px fixed size) — NEVER put text/image inside it or use it as a content wrapper. Always use it standalone and empty: <div class="accent-bar"></div>
 `.trim();
 
 function getPredefinedCss(tone: ToneConfig, fontFamily: string): string {
@@ -465,10 +462,12 @@ IMAGE SLOTS: [IMAGE:placeholder_N|desc] → <img class="slot" data-slot="placeho
 BOLD: **text** → <strong>text</strong>
 SECTION STRUCTURE: <section id="section-N"> (one per topic/image/feature-point)
 
+LAYOUT (STRICT): NEVER place an image side-by-side with text in a horizontal split (image on one side, text column on the other). Always stack: image above or below the text, full width. This applies to every section, no exceptions.
+
 LINE BREAKS (STRICT): The copywriter pre-broke CONTENT into lines for exact reading rhythm.
 - Preserve every line break in CONTENT literally: render each CONTENT line as its own line (e.g. separate <br>-divided segment or its own element) inside the block.
 - NEVER merge two separate CONTENT lines into one flowing sentence/line.
-- NEVER let CSS word-wrap split a single CONTENT line across two visual rows. If a line is long, shrink that line's font-size (clamp() or a smaller class) so it fits on one row — do not allow an extra wrap to appear.
+- NEVER let CSS word-wrap split a single CONTENT line across two visual rows. If a line is long, shrink that line's font-size (clamp() or a smaller class) so it fits on one row — do not shrink below a readable minimum (e.g. never under 20px for narrative copy), and do not allow an extra wrap to appear.
 
 ${getFontSizeGuide(tone.id)}
 
@@ -570,7 +569,8 @@ OUTPUT RULES:
 - **text** → <strong>text</strong>
 - No inline style="" attributes
 - STRICT CONTENT RULE: Use ONLY text from CONTENT below. Do NOT invent branding, badges, slogans, collaboration names, or any copy not explicitly in CONTENT.
-- LINE BREAKS (STRICT): Preserve every line break in CONTENT literally (one CONTENT line = one rendered line, e.g. via <br>). Never merge two CONTENT lines into one sentence, and never let CSS word-wrap split a single CONTENT line across two rows — shrink font-size instead.
+- LAYOUT (STRICT): NEVER place an image side-by-side with text in a horizontal split (image on one side, text column on the other). Always stack: image above or below the text, full width. This applies to every section, no exceptions.
+- LINE BREAKS (STRICT): Preserve every line break in CONTENT literally (one CONTENT line = one rendered line, e.g. via <br>). Never merge two CONTENT lines into one sentence, and never let CSS word-wrap split a single CONTENT line across two rows — shrink font-size instead, but never below a readable minimum (e.g. never under 20px for narrative copy).
 - To write secondary small text (fine print, label, disclaimer), wrap it in <p class="small"> or <p class="desc"> (16px).
 
 ${getFontSizeGuide(tone.id)}
