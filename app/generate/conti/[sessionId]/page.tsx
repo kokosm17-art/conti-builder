@@ -30,6 +30,8 @@ export default function ContiViewPage() {
   const [formDraft, setFormDraft] = useState<FormData | undefined>(undefined);
   const [generationCount, setGenerationCount] = useState(0);
   const [contiGenCount, setContiGenCount] = useState(0);
+  const [designExists, setDesignExists] = useState(false);
+  const [htmlDesignExists, setHtmlDesignExists] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -65,6 +67,8 @@ export default function ContiViewPage() {
       setFormDraft(data.formDraft as FormData | undefined);
       setGenerationCount(data.generationCount ?? 0);
       setContiGenCount(data.contiGenCount ?? 0);
+      setDesignExists(!!data.designResult);
+      setHtmlDesignExists(!!data.htmlDesign?.fullHtml);
       setLoading(false);
     })();
 
@@ -197,15 +201,28 @@ export default function ContiViewPage() {
   }
 
   // 디자인 생성 플로우는 톤 선택 → 이미지 업로드 → 디자인 생성 순서이므로
-  // /generate/tone부터 시작한다 (mypage.tsx의 handleGenerateDesign과 동일 패턴).
-  // /generate/design은 "현재 활성 세션"을 기준으로 동작하므로, 이동 전에
-  // 이 세션을 활성화해야 엉뚱한 세션의 콘티로 디자인을 생성하지 않는다
+  // /generate/tone/[sessionId]부터 시작한다 (mypage.tsx의 handleGenerateDesign과
+  // 동일 패턴). 톤/업로드/디자인 화면 모두 URL의 sessionId로만 동작해 "현재
+  // 활성 세션이 뭔지"에 의존하지 않지만, 재생성 횟수 등 기존 활성 세션 기반
+  // 정책과의 호환을 위해 이 세션을 활성 상태로 맞춰둔다
   async function handleGoToDesign() {
     try {
       await reactivateSession(user!.uid, sessionId);
       sessionStorage.removeItem("contie_form");
       sessionStorage.removeItem("contie_step");
-      router.push("/generate/tone");
+      sessionStorage.removeItem("contie_form_session_id");
+      router.push(`/generate/tone/${sessionId}`);
+    } catch {
+      alert("작업을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+  }
+
+  // 이미 생성된 디자인이 있으면 새로 생성하지 않고 완성된 디자인으로 바로 이동한다
+  // (mypage.tsx의 handleViewDesign과 동일 패턴: HTML/CSS 방식이면 preview-html, 구 방식이면 preview)
+  async function handleViewDesign() {
+    try {
+      await reactivateSession(user!.uid, sessionId);
+      router.push(htmlDesignExists ? `/generate/preview-html/${sessionId}` : `/generate/preview/${sessionId}`);
     } catch {
       alert("작업을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
@@ -273,7 +290,12 @@ export default function ContiViewPage() {
                     </li>
                   ))}
                 </ol>
-                {parsed.coreCopy && <p className="text-blue-600 font-semibold">{parsed.coreCopy}</p>}
+                {parsed.coreCopy && (
+                  <div className="mt-4">
+                    <span className="text-xs font-bold text-gray-400 block mb-2">핵심 카피</span>
+                    <p className="text-blue-600 font-semibold">{parsed.coreCopy}</p>
+                  </div>
+                )}
               </div>
             )}
             <div className="space-y-6">
@@ -303,15 +325,24 @@ export default function ContiViewPage() {
           </>
         )}
 
-        {/* 디자인 생성 CTA */}
+        {/* 디자인 생성/보기 CTA */}
         {contiText && (
           <div className="mt-8 flex justify-center">
-            <button
-              onClick={handleGoToDesign}
-              className="bg-blue-600 text-white font-bold px-10 py-4 rounded-xl hover:bg-blue-700 transition-colors text-base shadow-sm"
-            >
-              디자인 생성하기 ✦
-            </button>
+            {designExists || htmlDesignExists ? (
+              <button
+                onClick={handleViewDesign}
+                className="bg-blue-600 text-white font-bold px-10 py-4 rounded-xl hover:bg-blue-700 transition-colors text-base shadow-sm"
+              >
+                완성된 디자인 보러가기 →
+              </button>
+            ) : (
+              <button
+                onClick={handleGoToDesign}
+                className="bg-blue-600 text-white font-bold px-10 py-4 rounded-xl hover:bg-blue-700 transition-colors text-base shadow-sm"
+              >
+                디자인 생성하기 ✦
+              </button>
+            )}
           </div>
         )}
 

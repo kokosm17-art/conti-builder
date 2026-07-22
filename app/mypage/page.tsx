@@ -90,6 +90,7 @@ export default function MyPage() {
     // 복구 로직이 건너뛰어지는 문제가 있었음)
     sessionStorage.removeItem("contie_form");
     sessionStorage.removeItem("contie_step");
+    sessionStorage.removeItem("contie_form_session_id");
     router.push("/generate");
   }
 
@@ -145,12 +146,13 @@ export default function MyPage() {
       await reactivateSession(user.uid, s.id);
       sessionStorage.removeItem("contie_form");
       sessionStorage.removeItem("contie_step");
+      sessionStorage.removeItem("contie_form_session_id");
     } catch {
       alert("작업을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
       setResumingId(null);
       return;
     }
-    router.push("/generate/tone");
+    router.push(`/generate/tone/${s.id}`);
   }
 
   if (authLoading || loading) {

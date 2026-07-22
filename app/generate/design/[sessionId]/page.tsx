@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { getActiveSession, saveHtmlDesign } from "@/lib/session";
+import { getSessionById, reactivateSession, saveHtmlDesign } from "@/lib/session";
 
 const STEPS = [
   "콘티 분석 중...",
@@ -16,6 +16,7 @@ const STEPS = [
 export default function DesignGeneratePage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const { sessionId } = useParams<{ sessionId: string }>();
   const [stepIndex, setStepIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,8 +27,15 @@ export default function DesignGeneratePage() {
     let cancelled = false;
 
     async function run() {
-      const session = await getActiveSession(user!.uid);
-      if (!session) { router.push("/generate"); return; }
+      // 이 화면은 URL의 sessionId로만 동작한다 — "지금 활성 세션이 뭔지"를
+      // 다시 추측하지 않아, 다른 작업이 활성 세션을 바꿔치기해도 엉뚱한
+      // 세션의 콘티로 디자인을 생성하는 사고를 원천적으로 막는다.
+      const session = await getSessionById(sessionId, user!.uid);
+      if (!session) { router.push("/mypage"); return; }
+      if (session.status !== "active") {
+        await reactivateSession(user!.uid, sessionId).catch(() => {});
+      }
+      if (cancelled) return;
 
       // 이미 HTML 디자인이 있으면 바로 미리보기로
       if (session.htmlDesign && session.htmlDesign.fullHtml) {
@@ -83,7 +91,7 @@ export default function DesignGeneratePage() {
 
     run();
     return () => { cancelled = true; };
-  }, [user, authLoading, router]);
+  }, [user, authLoading, sessionId, router]);
 
   if (error) {
     return (
@@ -94,7 +102,7 @@ export default function DesignGeneratePage() {
           <p className="text-sm text-gray-500">{error}</p>
         </div>
         <button
-          onClick={() => router.push("/generate/upload")}
+          onClick={() => router.push(`/generate/upload/${sessionId}`)}
           className="bg-blue-600 text-white font-bold px-8 py-3 rounded-xl hover:bg-blue-700 transition-colors"
         >
           돌아가기
@@ -113,7 +121,7 @@ export default function DesignGeneratePage() {
           <div className="absolute inset-0 flex items-center justify-center text-2xl">✦</div>
         </div>
 
-        <h1 className="text-xl font-black text-gray-900 mb-2">AI가 디자인을 만들고 있어요</h1>
+        <h1 className="text-xl font-black text-gray-900 mb-2">디자인을 만들고 있어요</h1>
         <p className="text-sm text-gray-500 mb-8">약 20~40초 소요됩니다. 잠시만 기다려 주세요.</p>
 
         {/* 진행 스텝 */}

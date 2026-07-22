@@ -75,6 +75,48 @@ export async function getActiveSession(userId: string) {
   };
 }
 
+/**
+ * 특정 세션 ID로 직접 조회 (활성 세션 여부와 무관).
+ * /generate/tone, /generate/upload, /generate/design처럼 URL에 세션 ID가 있는
+ * 화면에서 사용 — "현재 활성 세션이 무엇인지"에 의존하지 않아, 다른 탭/다른 작업이
+ * 활성 세션을 바꿔치기해도 엉뚱한 세션 데이터를 불러오지 않는다.
+ */
+export async function getSessionById(sessionId: string, userId: string) {
+  const snap = await getDoc(doc(db, "sessions", sessionId));
+  if (!snap.exists()) return null;
+  const data = snap.data();
+  if (data.userId !== userId) return null;
+
+  return {
+    id: snap.id,
+    productName: data.productName as string,
+    productHash: data.productHash as string,
+    status: data.status as string,
+    generationCount: data.generationCount as number,
+    userId: data.userId as string,
+
+    contiGenCount: data.contiGenCount ?? 0,
+    contiEditCount: data.contiEditCount ?? 0,
+    designGenCount: data.designGenCount ?? 0,
+    designEditCount: data.designEditCount ?? 0,
+
+    contiText: data.contiText as string | undefined,
+    contiDraft: data.contiDraft as string | undefined,
+    formDraft: data.formDraft as import("./types").FormData | undefined,
+    formStep: data.formStep as number | undefined,
+    selectedTone: data.selectedTone as string | undefined,
+    fontChoice: data.fontChoice as string | undefined,
+    shareId: data.shareId as string | undefined,
+    assets: data.assets as Record<string, string> | undefined,
+    designResult: data.designResult as import("./types").DesignResult | undefined,
+    htmlDesign: data.htmlDesign as import("./types").HtmlDesignResult | undefined,
+    motionEnabled: data.motionEnabled as boolean | undefined,
+    feedbackStar: data.feedbackStar as number | undefined,
+    feedbackText: data.feedbackText as string | undefined,
+    sectionRegenCount: data.sectionRegenCount ?? 0,
+  };
+}
+
 /** 새 세션 생성 */
 export async function createSession(userId: string, productName: string) {
   const ref = await addDoc(collection(db, "sessions"), {

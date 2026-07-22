@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { getActiveSession, updateDesignTone, updateFontChoice, incrementDesignGen } from "@/lib/session";
+import { getSessionById, reactivateSession, updateDesignTone, updateFontChoice, incrementDesignGen } from "@/lib/session";
 import { FONT_OPTIONS, TONE_RECOMMENDED_FONT } from "@/components/design-system/fonts";
 import { ArrowLeft, Sparkles, AlertTriangle, Check } from "lucide-react";
 
@@ -69,6 +69,7 @@ const TONE_LIST: ToneItem[] = [
 export default function ToneSelectPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const { sessionId } = useParams<{ sessionId: string }>();
   const [selectedTone, setSelectedTone] = useState<string>("");
   const [selectedFont, setSelectedFont] = useState<string>("recommended");
   const [session, setSession] = useState<any>(null);
@@ -82,29 +83,39 @@ export default function ToneSelectPage() {
       return;
     }
 
-    // 활성 세션 불러오기
-    getActiveSession(user.uid)
-      .then((activeSession) => {
-        if (!activeSession) {
-          alert("활성화된 콘티 작업이 없습니다. 콘티 생성을 먼저 완료해 주세요.");
-          router.push("/generate");
+    let ignore = false;
+    setLoading(true);
+
+    // 이 화면은 URL의 sessionId로만 동작한다(getActiveSession으로 "지금 활성 세션이
+    // 무엇인지"를 다시 추측하지 않는다). 다른 탭/다른 작업이 활성 세션을 바꿔도
+    // 이 화면은 항상 자기 세션(sessionId)만 다룬다.
+    getSessionById(sessionId, user.uid)
+      .then(async (target) => {
+        if (ignore) return;
+        if (!target) {
+          alert("작업 기록을 찾을 수 없습니다.");
+          router.push("/mypage");
           return;
         }
-        setSession(activeSession);
-        if (activeSession.selectedTone) {
-          setSelectedTone(activeSession.selectedTone);
+        // 디자인 생성/수정 흐름은 이 세션을 활성 세션으로 유지해야 하는
+        // 기존 정책(생성 횟수 등)과 맞물려 있어, 활성화만 함께 해준다
+        if (target.status !== "active") {
+          await reactivateSession(user.uid, sessionId).catch(() => {});
         }
-        if (activeSession.fontChoice) {
-          setSelectedFont(activeSession.fontChoice);
-        }
+        if (ignore) return;
+        setSession(target);
+        if (target.selectedTone) setSelectedTone(target.selectedTone);
+        if (target.fontChoice) setSelectedFont(target.fontChoice);
       })
       .catch((err) => {
         console.error("세션 로드 오류:", err);
       })
       .finally(() => {
-        setLoading(false);
+        if (!ignore) setLoading(false);
       });
-  }, [user, authLoading, router]);
+
+    return () => { ignore = true; };
+  }, [user, authLoading, sessionId, router]);
 
   const handleSelectTone = (toneId: string) => {
     setSelectedTone(toneId);
@@ -115,7 +126,7 @@ export default function ToneSelectPage() {
     setSaving(true);
     try {
       const isNewTone = session.selectedTone !== selectedTone;
-      
+
       // 이미 톤이 설정되어 있는데 다른 톤으로 변경하는 경우 디자인 재생성 카운트 확인 및 차감
       if (session.selectedTone && isNewTone) {
         if (session.designGenCount >= 5) {
@@ -124,7 +135,7 @@ export default function ToneSelectPage() {
           setSaving(false);
           return;
         }
-        
+
         // 디자인 재생성 횟수 1회 증가
         await incrementDesignGen(session.id);
       }
@@ -134,7 +145,7 @@ export default function ToneSelectPage() {
       await updateFontChoice(session.id, selectedFont || "recommended");
 
       // 다음 업로드 단계로 이동
-      router.push("/generate/upload");
+      router.push(`/generate/upload/${session.id}`);
     } catch (err) {
       console.error("디자인 톤 저장 오류:", err);
       alert("설정 저장 중 오류가 발생했습니다. 다시 시도해 주세요.");
@@ -159,7 +170,7 @@ export default function ToneSelectPage() {
       {/* 상단바 */}
       <header className="sticky top-0 z-40 bg-white border-b border-gray-100 shadow-sm">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/generate" className="text-gray-500 hover:text-gray-900 flex items-center gap-2 text-sm font-semibold transition-colors">
+          <Link href={session ? `/generate/conti/${session.id}` : "/generate"} className="text-gray-500 hover:text-gray-900 flex items-center gap-2 text-sm font-semibold transition-colors">
             <ArrowLeft className="w-4 h-4" /> 콘티 결과로 돌아가기
           </Link>
           <div className="flex items-center gap-2">
@@ -178,13 +189,13 @@ export default function ToneSelectPage() {
             상세페이지의 디자인 톤을 선택해 주세요
           </h1>
           <p className="text-gray-500 text-sm max-w-lg mx-auto leading-relaxed">
-            원하시는 비주얼 분위기를 1종 선택하시면, AI가 콘티 카피와 이미지들을 해당 톤앤매너 테마에 맞추어 예쁘게 배치하고 조립합니다.
+            원하시는 비주얼 분위기를 1종 선택하시면, 콘티 카피와 이미지들을 해당 톤앤매너 테마에 맞추어 예쁘게 배치하고 조립합니다.
           </p>
-          
+
           {session && session.selectedTone && (
             <div className="mt-4 inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-2 text-xs font-semibold">
               <AlertTriangle className="w-4 h-4 text-amber-600" />
-              주의: 이미 생성된 디자인 톤 변경 시, 디자인 재생성 횟수가 차감됩니다. 
+              주의: 이미 생성된 디자인 톤 변경 시, 디자인 재생성 횟수가 차감됩니다.
               (남은 재생성 횟수: <span className="font-bold text-amber-700">{remainingGen}회</span> / 5회)
             </div>
           )}
@@ -206,7 +217,7 @@ export default function ToneSelectPage() {
               >
                 {/* 비주얼 카드 상단 테마 썸네일 대용 스타일 헤더 */}
                 <div className={`h-24 p-5 flex flex-col justify-end ${tone.styleClass} border-b border-gray-100`}>
-                  <span 
+                  <span
                     className="text-[10px] uppercase font-bold tracking-widest px-2.5 py-1 rounded-full self-start mb-2"
                     style={{ backgroundColor: isSelected ? "#3b82f6" : "#e5e7eb", color: isSelected ? "#fff" : "#4b5563" }}
                   >
@@ -214,13 +225,13 @@ export default function ToneSelectPage() {
                   </span>
                   <h3 className="text-xl font-black">{tone.name}</h3>
                 </div>
-                
+
                 {/* 본문 설명 */}
                 <div className="bg-white p-5 flex-1 flex flex-col justify-between">
                   <div>
                     <p className="text-xs text-gray-400 font-semibold tracking-wider mb-2">추천 카테고리</p>
                     <p className="text-xs font-bold text-gray-700 mb-4">{tone.badge}</p>
-                    
+
                     <p className="text-xs text-gray-400 font-semibold tracking-wider mb-2">톤 특징</p>
                     <p className="text-sm text-gray-600 leading-relaxed mb-4">{tone.description}</p>
                   </div>

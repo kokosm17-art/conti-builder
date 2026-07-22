@@ -23,6 +23,7 @@ import {
 import { ArrowLeft, RefreshCw, Download, Link2, Zap, Pencil } from "lucide-react";
 
 const UPLOAD_KEY = "contie_upload_slots";
+const UPLOAD_SESSION_KEY = "contie_upload_slots_session_id";
 
 const ASPECT_RATIO_OPTIONS: { label: string; value: string }[] = [
   { label: "3:4", value: "3/4" },
@@ -107,10 +108,11 @@ export default function PreviewPage() {
       setSections(data.designResult.sections);
     }
 
-    // 이미지: sessionStorage 우선, 없으면 Firestore
+    // 이미지: sessionStorage 우선(단, 이 세션 것일 때만), 없으면 Firestore
     try {
+      const cachedSessionId = sessionStorage.getItem(UPLOAD_SESSION_KEY);
       const saved = sessionStorage.getItem(UPLOAD_KEY);
-      if (saved) {
+      if (saved && cachedSessionId === sessionId) {
         const slots: { id: string; imageUrl: string | null }[] = JSON.parse(saved);
         const map: Record<string, string> = {};
         slots.forEach((s) => { if (s.imageUrl) map[s.id] = s.imageUrl; });
@@ -131,9 +133,8 @@ export default function PreviewPage() {
     await updateDoc(doc(db, "sessions", sessionId), { motionEnabled: next });
   }
 
-  // /generate/design은 "현재 활성 세션"을 기준으로 동작하므로,
-  // 보고 있는 세션이 활성 세션이 아니면 먼저 이 세션을 활성화해야
-  // 엉뚱한 세션의 콘티로 생성을 시도하거나 디자인이 유실되지 않는다
+  // /generate/design/[sessionId]은 이 sessionId로 직접 동작하지만, 재생성
+  // 횟수 등 기존 활성 세션 기반 정책과의 호환을 위해 이동 전 활성화해 둔다
   async function goToDesignGenerate() {
     if (!user) return false;
     try {
@@ -152,12 +153,12 @@ export default function PreviewPage() {
     }
     if (!(await goToDesignGenerate())) return;
     await updateDoc(doc(db, "sessions", sessionId), { designResult: null });
-    router.push("/generate/design");
+    router.push(`/generate/design/${sessionId}`);
   }
 
   async function handleStartDesignGenerate() {
     if (!(await goToDesignGenerate())) return;
-    router.push("/generate/design");
+    router.push(`/generate/design/${sessionId}`);
   }
 
   async function handleSectionRegen(sectionId: string) {
@@ -273,6 +274,7 @@ export default function PreviewPage() {
           slots.push({ id: key, imageUrl: base64 });
         }
         sessionStorage.setItem(UPLOAD_KEY, JSON.stringify(slots));
+        sessionStorage.setItem(UPLOAD_SESSION_KEY, sessionId);
       } catch {}
       // Firestore에도 저장 (새로고침/재접속 후에도 유지)
       try {
@@ -323,7 +325,7 @@ export default function PreviewPage() {
       <header className="sticky top-0 z-40 bg-white border-b border-gray-100 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center gap-2">
           <button
-            onClick={() => reviewGate.guardedNavigate(() => router.push("/generate/upload"))}
+            onClick={() => reviewGate.guardedNavigate(() => router.push(`/generate/upload/${sessionId}`))}
             className="shrink-0 text-gray-500 hover:text-gray-900 flex items-center gap-1 text-sm font-semibold mr-1"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -573,7 +575,7 @@ export default function PreviewPage() {
 
                       {/* AI 수정 지시 */}
                       <div className="px-4 py-3 space-y-2">
-                        <p className="text-xs font-bold text-gray-500">AI 카피·레이아웃 수정</p>
+                        <p className="text-xs font-bold text-gray-500">카피·레이아웃 수정</p>
                         <textarea
                           value={editInstruction}
                           onChange={(e) => setEditInstruction(e.target.value)}
@@ -602,7 +604,7 @@ export default function PreviewPage() {
                               disabled={editLoading || !editInstruction.trim()}
                               className="text-xs font-bold px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
                             >
-                              {editLoading ? "적용 중..." : "AI 수정"}
+                              {editLoading ? "적용 중..." : "수정"}
                             </button>
                           </div>
                         </div>

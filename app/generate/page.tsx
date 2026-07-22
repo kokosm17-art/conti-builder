@@ -65,7 +65,7 @@ function LoginPromptModal({ onClose }: { onClose: () => void }) {
           <div className="text-4xl mb-3">✦</div>
           <h2 className="text-xl font-black text-gray-900 mb-2">콘티 생성을 시작할게요!</h2>
           <p className="text-sm text-gray-500">
-            로그인 후 AI 콘티를 생성할 수 있습니다.<br />
+            로그인 후 콘티를 생성할 수 있습니다.<br />
             회원가입은 무료이며, 테스트 기간 동안 무료로 이용 가능합니다.
           </p>
         </div>
@@ -210,12 +210,16 @@ export default function GeneratePage() {
   const [restored, setRestored] = useState(false);
 
   // 폼/스텝 변경 시 sessionStorage에 저장
+  // (어느 세션의 작성 내용인지 sessionId를 꼬리표로 함께 남긴다 — 그래야 나중에
+  // 다른 세션이 활성화된 상태로 이 탭을 다시 열었을 때, 남의 세션 캐시를
+  // 잘못 이어받아 뒤섞이는 걸 막을 수 있다)
   useEffect(() => {
     try {
       sessionStorage.setItem("contie_form", JSON.stringify(form));
       sessionStorage.setItem("contie_step", String(step));
+      sessionStorage.setItem("contie_form_session_id", sessionId ?? "");
     } catch {}
-  }, [form, step]);
+  }, [form, step, sessionId]);
 
   // 입력 내용/단계가 바뀔 때마다 (디바운스) Firestore에도 임시저장
   // (sessionStorage는 탭 종료/오류 시 사라질 수 있어 브라우저 저장소만으로는 불안정.
@@ -248,19 +252,37 @@ export default function GeneratePage() {
 
     getActiveSession(user.uid).then((session) => {
       if (session) {
+        // 브라우저에 남아있는 임시저장(sessionStorage)이 지금 활성화된 이 세션의
+        // 것이 맞는지 꼬리표(contie_form_session_id)로 확인한다. 다른 세션 작업 중
+        // 남겨진 캐시라면(예: 잠깐 다른 제품을 작성하다 만 경우) 절대 이어받지 않고
+        // 서버에 저장된 이 세션 고유의 내용으로만 복구한다 — 그렇지 않으면 화면엔
+        // "이 세션 제품명"인데 내용은 "남의 세션 내용"인 뒤섞인 폼이 만들어지고,
+        // 그대로 생성/재생성을 누르면 이 세션의 콘티가 엉뚱한 내용으로 덮어써진다.
+        let localDraftBelongsToThisSession = false;
+        if (hasLocalDraft) {
+          try {
+            localDraftBelongsToThisSession =
+              sessionStorage.getItem("contie_form_session_id") === session.id;
+          } catch {}
+        }
+
         setSessionId(session.id);
         setSessionInfo({
           productName: session.productName as string,
           generationCount: session.generationCount,
         });
-        setForm((prev) => ({ ...prev, productName: session.productName as string }));
 
-        // sessionStorage에 작성 내용이 없는 경우(새 기기/탭, 마이페이지에서
-        // "이어서 작성하기" 등) Firestore에 보관해 둔 마지막 임시저장본/콘티로 복구
-        if (!hasLocalDraft) {
-          if (session.formDraft) {
-            setForm((prev) => ({ ...prev, ...session.formDraft }));
-          }
+        if (localDraftBelongsToThisSession) {
+          // 내 세션의 캐시가 맞으므로 그대로 사용하되, 제품명만 서버 값으로 맞춘다
+          setForm((prev) => ({ ...prev, productName: session.productName as string }));
+        } else {
+          // 남의 세션 캐시이거나 캐시가 없는 경우: Firestore에 보관된
+          // 이 세션 고유의 마지막 임시저장본/콘티로 완전히 새로 복구한다
+          setForm({
+            ...INITIAL_FORM,
+            productName: session.productName as string,
+            ...(session.formDraft ?? {}),
+          });
           // 콘티가 이미 생성되어 있어도 "이어서 작성하기"는 완성본이 아닌
           // 입력 폼(이전에 작성한 내용 포함)으로 이동해, 내용을 수정하고
           // 다시 생성할 수 있게 한다. 완성본은 "콘티 보기" 버튼으로 확인한다.
@@ -272,6 +294,8 @@ export default function GeneratePage() {
             setStep(session.formStep);
           } else if (conti) {
             setStep(9);
+          } else {
+            setStep(0);
           }
         }
       }
@@ -504,7 +528,7 @@ export default function GeneratePage() {
                 </>
               )}
               {generating && (
-                <span className="text-sm text-blue-600 animate-pulse">AI가 콘티를 작성하고 있습니다...</span>
+                <span className="text-sm text-blue-600 animate-pulse">콘티를 작성하고 있습니다...</span>
               )}
               {!generating && rawOutput && (
                 <>
@@ -617,10 +641,31 @@ export default function GeneratePage() {
             </div>
             <div className="mt-3 flex justify-end">
               <button
-                onClick={() => {
+                onClick={async () => {
                   setStep(0); setRawOutput(""); setForm(INITIAL_FORM);
-                  setSessionId(null); setSessionInfo(null); setChatInput("");
-                  try { sessionStorage.removeItem("contie_form"); sessionStorage.removeItem("contie_step"); } catch {}
+                  setSessionInfo(null); setChatInput("");
+                  try {
+                    sessionStorage.removeItem("contie_form");
+                    sessionStorage.removeItem("contie_step");
+                    sessionStorage.removeItem("contie_form_session_id");
+                  } catch {}
+                  // startNewSession()이 Firestore를 여러 번 오가는 동안(수백ms~1초 이상)
+                  // sessionId는 아직 이전 세션 값 그대로다. 이 사이 restored를 꺼두지
+                  // 않으면, 방금 입력 중인 새 내용이 자동저장 타이머에 의해 "이전
+                  // 세션 ID"로 저장돼버려 완전히 다른(심지어 예전에 완성된) 세션의
+                  // 내용을 덮어쓰는 사고로 이어질 수 있다. 새 세션 ID가 확정될
+                  // 때까지 자동저장을 확실히 멈춰둔다.
+                  setRestored(false);
+                  // 기존 활성 세션을 마이페이지 기록으로 보관(만료) 처리하고 새 빈 세션을 만든다.
+                  // (이걸 안 하면 서버에는 이전 제품 세션이 계속 "active"로 남아, 다음 방문 때
+                  // 그 세션이 다시 불러와지면서 새로 입력 중이던 다른 제품 정보와 뒤섞이는 문제가 있었음)
+                  if (user) {
+                    const newId = await startNewSession(user.uid);
+                    setSessionId(newId);
+                  } else {
+                    setSessionId(null);
+                  }
+                  setRestored(true);
                 }}
                 className="text-xs text-gray-400 hover:text-gray-600"
               >
@@ -635,8 +680,8 @@ export default function GeneratePage() {
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div>
                   <div className="text-xs font-bold text-blue-600 tracking-wider uppercase mb-1">NEXT STEP</div>
-                  <p className="font-black text-gray-900 text-lg">콘티 완성! 이제 디자인까지 AI로 만드세요</p>
-                  <p className="text-sm text-gray-500 mt-1">완성된 콘티를 바탕으로 AI가 상세페이지 디자인을 자동 조립합니다.</p>
+                  <p className="font-black text-gray-900 text-lg">콘티 완성! 이제 디자인까지 자동으로 만드세요</p>
+                  <p className="text-sm text-gray-500 mt-1">완성된 콘티를 바탕으로 상세페이지 디자인을 자동 조립합니다.</p>
                 </div>
                 {freeTrialUsed ? (
                   <button
@@ -647,7 +692,7 @@ export default function GeneratePage() {
                   </button>
                 ) : (
                   <button
-                    onClick={() => router.push("/generate/tone")}
+                    onClick={() => sessionId && router.push(`/generate/tone/${sessionId}`)}
                     className="flex-shrink-0 bg-blue-600 text-white font-bold px-7 py-3.5 rounded-xl hover:bg-blue-700 transition-colors text-sm whitespace-nowrap"
                   >
                     디자인도 만들러 가기 ✦
@@ -904,8 +949,8 @@ export default function GeneratePage() {
                     className={`border-2 rounded-xl p-4 text-left transition-all ${form.introStyle === "auto" ? "border-blue-600 bg-blue-50" : "border-gray-200 hover:border-blue-300"}`}
                   >
                     <div className="text-xl mb-1">🤖</div>
-                    <div className="font-bold text-gray-900 text-sm mb-1">AI 자동 판단</div>
-                    <div className="text-xs text-gray-500 leading-relaxed">인지도 수준을 참고해<br />AI가 최적 전략 선택<br /><span className="text-blue-500">잘 모르겠다면 이걸로</span></div>
+                    <div className="font-bold text-gray-900 text-sm mb-1">자동 판단</div>
+                    <div className="text-xs text-gray-500 leading-relaxed">인지도 수준을 참고해<br />최적 전략 자동 선택<br /><span className="text-blue-500">잘 모르겠다면 이걸로</span></div>
                   </button>
                 </div>
               </Field>
@@ -980,7 +1025,7 @@ export default function GeneratePage() {
                 disabled={!canNext(9, form) || generating}
                 className="bg-blue-600 text-white text-sm font-bold px-7 py-3 rounded-xl hover:bg-blue-700 disabled:opacity-40 transition-colors"
               >
-                {generating ? "생성 중..." : "AI 콘티 생성하기 ✦"}
+                {generating ? "생성 중..." : "콘티 생성하기 ✦"}
               </button>
             )}
           </div>

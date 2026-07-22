@@ -3,14 +3,13 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, setDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ensureShareId, reactivateSession, saveHtmlDesignEdit } from "@/lib/session";
 import { useReviewGate } from "@/lib/use-review-gate";
 import { ReviewModal } from "@/components/review-modal";
 import { ArrowLeft, RefreshCw, Download, Link2, Pencil, Image as ImageIcon, X } from "lucide-react";
 
-const UPLOAD_KEY = "contie_upload_slots";
 const GREY_GIF = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
 // ─── 타입 ────────────────────────────────────────────────────────────────────
@@ -22,6 +21,30 @@ interface SectionMeta {
 }
 
 // ─── DOM 유틸 ─────────────────────────────────────────────────────────────────
+
+// 슬롯별 이미지를 Firestore 문서(1MiB 제한)에 안전하게 담기 위해 리사이즈+압축 후 base64로 변환
+function compressImage(file: File, maxWidth = 1400, quality = 0.8): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error("파일을 읽을 수 없습니다."));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("이미지를 읽을 수 없습니다."));
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("이미지를 처리할 수 없습니다.")); return; }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 function parseSectionMetas(fullHtml: string, sectionIds: string[]): SectionMeta[] {
   if (typeof window === "undefined" || !fullHtml) {
@@ -71,11 +94,11 @@ function buildInteractiveHtml(html: string): string {
   const style = domDoc.createElement("style");
   style.id = "ci-overlay-styles";
   style.textContent = `
-    .ci-wrap{position:relative;display:block;cursor:pointer;}
+    .ci-wrap{position:relative;display:block;cursor:pointer;min-height:280px;overflow:hidden;}
     .ci-ph{
-      position:absolute;inset:0;min-height:160px;
+      position:absolute;inset:0;min-height:280px;
       display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
-      background:#f1f2f5;border:2px dashed #c9cdd4;z-index:5;
+      background:#f1f2f5;border:2px dashed #c9cdd4;z-index:50;
       transition:background .15s;
     }
     .ci-ph:hover{background:#e4e6ec;}
@@ -87,7 +110,7 @@ function buildInteractiveHtml(html: string): string {
       position:absolute;bottom:10px;right:10px;
       background:rgba(0,0,0,.58);color:#fff;border:none;border-radius:7px;
       padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer;
-      display:flex;align-items:center;gap:5px;z-index:6;
+      display:flex;align-items:center;gap:5px;z-index:51;
       opacity:0;transition:opacity .2s;font-family:sans-serif;
     }
     .ci-wrap:hover .ci-chg{opacity:1;}
@@ -139,7 +162,7 @@ function buildInteractiveHtml(html: string): string {
     wrap.appendChild(ph);
     wrap.appendChild(chgBtn);
     // img는 placeholder 뒤에 있어야 placeholder가 덮을 수 있음
-    img.style.cssText = "width:100%;display:block;object-fit:cover;position:relative;z-index:1;";
+    img.style.cssText = "width:100%;display:block;object-fit:cover;position:relative;z-index:1;min-height:280px;";
   });
 
   // 섹션마다 [수정] 버튼 추가
@@ -251,18 +274,12 @@ export default function PreviewHtmlPage() {
     setFullHtml(html);
     setSectionIds(ids);
 
-    let loadedAssets: Record<string, string> = {};
-    try {
-      const saved = sessionStorage.getItem(UPLOAD_KEY);
-      if (saved) {
-        const slots: { id: string; imageUrl: string | null }[] = JSON.parse(saved);
-        slots.forEach((s) => { if (s.imageUrl) loadedAssets[s.id] = s.imageUrl; });
-      } else if (data.assets) {
-        loadedAssets = data.assets;
-      }
-    } catch {
-      if (data.assets) loadedAssets = data.assets;
-    }
+    const assetsSnap = await getDocs(collection(db, "sessions", sessionId, "assets"));
+    const loadedAssets: Record<string, string> = {};
+    assetsSnap.forEach((d) => {
+      const url = d.data().dataUrl;
+      if (url) loadedAssets[d.id] = url;
+    });
     setAssets(loadedAssets);
     setLoading(false);
   }
@@ -335,32 +352,20 @@ export default function PreviewHtmlPage() {
 
   // ── 이미지 업로드 ────────────────────────────────────────────────────────
 
-  function handleImageUpload(slotId: string, file: File) {
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64 = reader.result as string;
-      setAssets((prev) => ({ ...prev, [slotId]: base64 }));
-
-      // iframe에 직접 전송 (리로드 없이 in-place 업데이트)
+  async function handleImageUpload(slotId: string, file: File) {
+    try {
+      const compressed = await compressImage(file);
+      setAssets((prev) => ({ ...prev, [slotId]: compressed }));
       iframeRef.current?.contentWindow?.postMessage(
-        { type: "IMAGE_DATA", slotId, dataUrl: base64 },
+        { type: "IMAGE_DATA", slotId, dataUrl: compressed },
         "*"
       );
-
-      try {
-        const saved = sessionStorage.getItem(UPLOAD_KEY);
-        const slots: { id: string; imageUrl: string | null }[] = saved ? JSON.parse(saved) : [];
-        const idx = slots.findIndex((s) => s.id === slotId);
-        if (idx >= 0) slots[idx] = { ...slots[idx], imageUrl: base64 };
-        else slots.push({ id: slotId, imageUrl: base64 });
-        sessionStorage.setItem(UPLOAD_KEY, JSON.stringify(slots));
-      } catch {}
-
-      try {
-        await updateDoc(doc(db, "sessions", sessionId), { [`assets.${slotId}`]: base64 });
-      } catch {}
-    };
-    reader.readAsDataURL(file);
+      // 슬롯별 별도 문서에 저장 (Firestore 문서당 1MiB 제한을 이미지 수가 늘어도 넘지 않도록)
+      await setDoc(doc(db, "sessions", sessionId, "assets", slotId), { dataUrl: compressed });
+    } catch (err) {
+      console.error("이미지 저장 실패:", err);
+      alert("사진 저장에 실패했습니다. 다시 시도해 주세요. (저장되지 않으면 화면을 벗어날 때 사진이 사라집니다)");
+    }
   }
 
   // ── 섹션 AI 수정 ─────────────────────────────────────────────────────────
@@ -413,7 +418,7 @@ export default function PreviewHtmlPage() {
     try {
       await reactivateSession(user.uid, sessionId);
       await updateDoc(doc(db, "sessions", sessionId), { htmlDesign: null });
-      router.push("/generate/design");
+      router.push(`/generate/design/${sessionId}`);
     } catch {
       alert("재생성 준비 중 오류가 발생했습니다.");
     }
@@ -475,7 +480,7 @@ export default function PreviewHtmlPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4">
         <p className="text-gray-500">디자인 결과가 없습니다.</p>
-        <button onClick={() => router.push("/generate/design")} className="bg-blue-600 text-white font-bold px-6 py-2 rounded-xl">
+        <button onClick={() => router.push(`/generate/design/${sessionId}`)} className="bg-blue-600 text-white font-bold px-6 py-2 rounded-xl">
           디자인 생성하기
         </button>
       </div>
@@ -500,14 +505,14 @@ export default function PreviewHtmlPage() {
       <header className="sticky top-0 z-40 bg-white border-b border-gray-100 shadow-sm">
         <div className="max-w-[820px] mx-auto px-4 h-14 flex items-center gap-2">
           <button
-            onClick={() => reviewGate.guardedNavigate(() => router.push("/generate/upload"))}
+            onClick={() => reviewGate.guardedNavigate(() => router.push(`/generate/upload/${sessionId}`))}
             className="shrink-0 text-gray-500 hover:text-gray-900 flex items-center gap-1 text-sm font-semibold mr-1"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
 
           <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full shrink-0">
-            AI 디자인
+            디자인
           </span>
 
           <span className="text-xs text-gray-400 shrink-0 hidden sm:inline ml-1">
@@ -618,7 +623,7 @@ export default function PreviewHtmlPage() {
                 <div>
                   <p className="text-xs font-bold text-gray-500 mb-2 flex items-center gap-1.5">
                     <Pencil className="w-3 h-3" />
-                    AI 수정 ({remainingEdit}회 남음)
+                    수정 ({remainingEdit}회 남음)
                   </p>
                   <textarea
                     value={editInstruction}
@@ -642,12 +647,12 @@ export default function PreviewHtmlPage() {
                       disabled={editLoading || !editInstruction.trim()}
                       className="flex-[2] text-sm font-bold py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
                     >
-                      {editLoading ? "수정 중..." : "AI 수정 적용"}
+                      {editLoading ? "수정 중..." : "수정 적용"}
                     </button>
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-gray-400">AI 수정 횟수(30회)를 모두 사용하셨습니다.</p>
+                <p className="text-sm text-gray-400">수정 횟수(30회)를 모두 사용하셨습니다.</p>
               )
             )}
 

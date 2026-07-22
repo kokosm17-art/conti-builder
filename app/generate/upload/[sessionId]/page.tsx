@@ -1,16 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { getActiveSession, updateDesignAssets } from "@/lib/session";
+import { getSessionById, reactivateSession, updateDesignAssets } from "@/lib/session";
 import { PLACEHOLDER_RE } from "@/lib/conti-parser";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ArrowLeft, Upload, ImageIcon, GripVertical } from "lucide-react";
 
 const STORAGE_KEY = "contie_upload_slots";
+const STORAGE_SESSION_KEY = "contie_upload_slots_session_id";
 
 interface Slot {
   id: string;
@@ -50,6 +51,7 @@ const MAX_SIZE_MB = 10;
 export default function UploadPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const { sessionId } = useParams<{ sessionId: string }>();
   const [session, setSession] = useState<{
     id: string;
     contiText?: string;
@@ -65,10 +67,15 @@ export default function UploadPage() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) { router.push("/login"); return; }
-    getActiveSession(user.uid).then((active) => {
+    let ignore = false;
+
+    // 이 화면도 URL의 sessionId로만 동작한다 — getActiveSession으로 "지금
+    // 활성 세션이 뭔지" 다시 추측하지 않는다.
+    getSessionById(sessionId, user.uid).then(async (active) => {
+      if (ignore) return;
       if (!active) {
-        alert("활성화된 콘티 작업이 없습니다.");
-        router.push("/generate");
+        alert("작업 기록을 찾을 수 없습니다.");
+        router.push("/mypage");
         return;
       }
       if (!active.contiText) {
@@ -76,12 +83,19 @@ export default function UploadPage() {
         router.push("/generate");
         return;
       }
+      if (active.status !== "active") {
+        await reactivateSession(user.uid, sessionId).catch(() => {});
+      }
+      if (ignore) return;
       setSession(active as typeof session & { htmlDesign?: { fullHtml: string } | null; designResult?: { sections: unknown[] } | null });
       const parsed = parsePlaceholders(active.contiText);
-      // sessionStorage에서 이미지 복원 (탭 닫지 않은 경우)
+      // sessionStorage에서 이미지 복원 (탭 닫지 않은 경우) — 단, 이 캐시가
+      // 지금 이 세션(sessionId)을 위한 것이었는지 꼬리표로 확인한 뒤에만 사용한다.
+      // 다른 세션 작업 중 남은 캐시라면 엉뚱한 사진이 이 세션 슬롯에 붙을 수 있다.
       try {
+        const cachedSessionId = sessionStorage.getItem(STORAGE_SESSION_KEY);
         const saved = sessionStorage.getItem(STORAGE_KEY);
-        if (saved) {
+        if (saved && cachedSessionId === sessionId) {
           const savedSlots: Slot[] = JSON.parse(saved);
           parsed.forEach((slot) => {
             const found = savedSlots.find((s) => s.id === slot.id);
@@ -91,13 +105,16 @@ export default function UploadPage() {
         }
       } catch {}
       setSlots(parsed);
-    }).finally(() => setLoading(false));
-  }, [user, authLoading, router]);
+    }).finally(() => { if (!ignore) setLoading(false); });
+
+    return () => { ignore = true; };
+  }, [user, authLoading, sessionId, router]);
 
   function persistSlots(newSlots: Slot[]) {
     try {
       const data = newSlots.map((s) => ({ id: s.id, guideText: s.guideText, imageUrl: s.imageUrl, aspectRatio: s.aspectRatio }));
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      sessionStorage.setItem(STORAGE_SESSION_KEY, sessionId);
     } catch {}
   }
 
@@ -187,7 +204,7 @@ export default function UploadPage() {
           <p className="text-sm text-gray-500">콘티에 (이미지 설명) 형식의 자리표시자가 없습니다.</p>
         </div>
         <button
-          onClick={() => router.push("/generate/design")}
+          onClick={() => router.push(`/generate/design/${sessionId}`)}
           className="bg-blue-600 text-white font-bold px-8 py-3.5 rounded-xl hover:bg-blue-700 transition-colors"
         >
           이미지 없이 디자인 생성하기 ✦
@@ -204,7 +221,7 @@ export default function UploadPage() {
       <header className="sticky top-0 z-40 bg-white border-b border-gray-100 shadow-sm">
         <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link
-            href="/generate/tone"
+            href={`/generate/tone/${sessionId}`}
             className="text-gray-500 hover:text-gray-900 flex items-center gap-2 text-sm font-semibold transition-colors"
           >
             <ArrowLeft className="w-4 h-4" /> 톤 선택으로
@@ -386,7 +403,7 @@ export default function UploadPage() {
                   if (!session) return;
                   // htmlDesign을 먼저 지워야 design 페이지가 재생성을 건너뛰지 않음
                   await updateDoc(doc(db, "sessions", session.id), { htmlDesign: null });
-                  router.push("/generate/design");
+                  router.push(`/generate/design/${session.id}`);
                 }}
                 className="text-gray-500 font-semibold px-4 py-3.5 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors text-sm whitespace-nowrap"
               >
@@ -405,7 +422,7 @@ export default function UploadPage() {
                 onClick={async () => {
                   if (!session) return;
                   await updateDoc(doc(db, "sessions", session.id), { designResult: null });
-                  router.push("/generate/design");
+                  router.push(`/generate/design/${session.id}`);
                 }}
                 className="text-gray-500 font-semibold px-4 py-3.5 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors text-sm whitespace-nowrap"
               >
@@ -420,7 +437,7 @@ export default function UploadPage() {
             </div>
           ) : (
             <button
-              onClick={() => router.push("/generate/design")}
+              onClick={() => router.push(`/generate/design/${sessionId}`)}
               className="bg-blue-600 text-white font-bold px-8 py-3.5 rounded-xl hover:bg-blue-700 transition-colors text-sm whitespace-nowrap"
             >
               디자인 생성하기 ✦
