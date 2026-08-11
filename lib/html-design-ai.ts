@@ -124,7 +124,7 @@ function splitTextBySlots(processedText: string, slotChunks: string[][]): string
 // premium=ALLRESET 데님, minimal=신일 무선 BLDC팬
 
 function getFontSizeGuide(toneId: string): string {
-  if (toneId === "emotional" || toneId === "cinematic" || toneId === "impact") {
+  if (toneId === "emotional" || toneId === "cinematic" || toneId === "impact" || toneId === "stimulus") {
     return `FONT SIZE (STRICT — reference case for this tone uses uniform large bold copy throughout):
 - ALL narrative copy lines — whether wrapped in **bold** or not — use the SAME large bold size: 55-70px, font-weight 800-900.
 - ** markup changes COLOR (accent) or a highlight background only — it never makes text bigger than surrounding lines. Plain (non-**) lines must NOT be shrunk down to a "body text" size.
@@ -163,6 +163,8 @@ SHARED CSS CLASS VOCABULARY (use these names consistently — second-pass sectio
 .i-divider     short, subtle horizontal pause divider (32px×2px, low opacity, aligned with surrounding text — not centered). A standalone "I" line in CONTENT is NOT the letter I — it marks a rhythm break, and is a rare last resort (see copy rules — should barely ever appear). Render it as <div class="i-divider"></div>, never as visible text "I".
 .s-point-label body-section subheading label — fixed size already defined in <style> (bigger and bolder than regular narrative copy, accent color). NEVER set your own font-size/color for it. A CONTENT line starting with "Point N. " (N = number) is this label: render "POINT N" as <div class="s-point-label">POINT N</div> on its own, then render the rest (the text after "Point N. " on that line, plus any further CONTENT lines that continue the same title with no blank line in between) as a plain <p> right below it with NO class and NO font-size override. This <p> follows the exact same LINE BREAKS rule as regular content below — keep each given CONTENT line's own <br> exactly as written, never merge them into one flowing line, and never let CSS word-wrap split a single given line; if one given line alone still doesn't fit, shrink this <p>'s font-size (never below 35px) instead of letting it wrap.
 .s-card-title  headline/emphasis text inside .s-card (e.g. a USP card in .s-grid) — fixed size already defined in <style>, pre-tuned to the card's OWN width (not the viewport), with a 35px floor built in. Any <p> that is a bold headline/emphasis line inside a .s-card MUST use <p class="s-card-title"> and MUST NOT have any inline style="" or a flat px font-size — cards are much narrower than the full screen, so a viewport-sized or hand-picked px value will overflow and wrap word-by-word. Regular (non-headline) body text inside a .s-card still uses the normal unclassed <p>.
+.s-dark        section-level dark override (add class="s-dark" to a <section>, no other change needed) — flips that section to a black background with white text; --accent stays the same color and remains legible on it. Only used on tones designed for it (see tone-specific rules above).
+.s-highlight   inline highlighter-marker emphasis for a short phrase WITHIN a line — wrap only the key word(s) in <span class="s-highlight">text</span>, never a whole paragraph or a standalone block. Do not use it as a section or div wrapper.
 `.trim();
 
 function getPredefinedCss(tone: ToneConfig, fontFamily: string): string {
@@ -263,6 +265,36 @@ section p {
   font-weight: 700;
   line-height: 1.35;
   letter-spacing: -0.01em;
+}
+    `;
+  } else if (tone.id === "stimulus") {
+    typographyCss = `
+section p {
+  font-size: clamp(32px, 6.5vw, 56px);
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+strong {
+  color: var(--accent);
+}
+.s-point-label {
+  font-size: clamp(70px, 9vw, 90px);
+  font-weight: 900;
+  color: var(--accent);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+.s-card-title {
+  font-size: clamp(35px, 15cqw, 46px);
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+.s-dark {
+  background-color: #0A0A0A;
+  color: #FFFFFF;
 }
     `;
   } else { // minimal
@@ -486,6 +518,11 @@ section p.small, section p.desc, section p.label, section p.s-small {
   border-radius: 2px;
   margin: 8px 0;
 }
+.s-highlight {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  padding: 0 4px;
+  border-radius: 3px;
+}
 .anim-fade {
   animation: fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -501,6 +538,10 @@ function buildToneHeader(tone: ToneConfig, fontFamily: string): string {
 TONE: ${tone.name} / ${tone.mood}
 --bg:${tone.background}  --text:${tone.textColor}  --accent:${tone.accentColor}
 Font: ${fontFamily}
+${tone.id === "stimulus" ? `
+DARK/LIGHT SECTION SWITCH (STRICT, this tone only): This tone alternates between the default light section (no extra class) and a dark section (add class="s-dark" to that <section>, nothing else changes). Use "s-dark" ONLY for: the opening hook line(s) of the intro, absolute/impact declaration statements ("죽기 전에 꼭...", "숨만 쉬어도..." style lines), numeric comparison callouts (e.g. "OO배 차이"), and urgency/scarcity copy (limited time, limited quantity, last chance). Use the default light section for everything else — general storytelling, explanation, product photography, FAQ, maker intro. Most sections in a typical conti should stay light; dark sections are a deliberate accent used sparingly, not a strict alternation pattern. Keep dark sections mostly text/number-driven (hero-style) — avoid .s-card/.s-grid layouts inside a .s-dark section.
+KEY PHRASE HIGHLIGHT: Wrap the single most important word or short phrase per major copy block in <span class="s-highlight">...</span> (see class vocabulary) — sparingly, not every line.
+` : ""}
 
 CRITICAL: ALL CSS in one <style> block. NEVER use style="" attributes.
 IMAGE SLOTS: [IMAGE:placeholder_N|desc] → <img class="slot" data-slot="placeholder_N" src="" alt="">

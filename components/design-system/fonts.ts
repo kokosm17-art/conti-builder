@@ -51,6 +51,7 @@ export const TONE_RECOMMENDED_FONT: Record<string, string> = {
   impact: "gmarket",
   premium: "barungothic",
   minimal: "noto-kr",
+  stimulus: "gmarket",
 };
 
 // 추천 폰트 CSS family 반환 (tone id + fontChoice 기준)

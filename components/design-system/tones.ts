@@ -120,6 +120,26 @@ export const TONES: ToneConfig[] = [
     mood: "제품이 인테리어 오브제처럼 돋보이는 얇은 폰트",
     cardStyleClass: "bg-[#FFFFFF] border-gray-200 text-gray-700",
   },
+  {
+    id: "stimulus",
+    name: "자극 톤",
+    recommendItems: "다이어트 / 이너뷰티 / 식품",
+    description:
+      "큼직한 헤드라인과 숫자로 강하게 밀어붙이는 선언형 구성. 후킹·긴급성 강조 구간은 검정 배경, 일반 설명 구간은 흰 배경으로 번갈아 구성해 강약을 준다. 충동구매를 강하게 자극하고 싶은 제품에 적합",
+    reference: "실제 완판 다이어트·식품 상세페이지 스타일 분석 기반",
+    background: "#FFFFFF",
+    textColor: "#111111",
+    accentColor: "#E63946",
+    accentPresets: [
+      { id: "green", hex: "#22C55E", label: "그린" },
+      { id: "gold", hex: "#EAB308", label: "골드" },
+      { id: "electricblue", hex: "#2D9CDB", label: "일렉트릭블루" },
+      { id: "hotpink", hex: "#FF3D8E", label: "핫핑크" },
+    ],
+    recommendedFont: "Gmarket Sans",
+    mood: "헤드라인이 주인공, 흰 배경과 검정 배경이 교차하는 임팩트 구성",
+    cardStyleClass: "bg-[#0A0A0A] border-red-600 text-white",
+  },
 ];
 
 export function getToneById(id: string): ToneConfig | undefined {

@@ -59,6 +59,14 @@ const TONE_LIST: ToneItem[] = [
     styleClass: "bg-[#FFFFFF] border-gray-200 text-gray-700",
     accentColor: "#444444",
   },
+  {
+    id: "stimulus",
+    name: "자극 톤",
+    badge: "다이어트 / 이너뷰티 / 식품",
+    description: "큼직한 헤드라인과 숫자로 강하게 밀어붙이는 선언형 구성. 후킹·긴급성 강조 구간은 검정 배경, 일반 설명 구간은 흰 배경으로 번갈아 구성해 강약을 준다. 충동구매를 강하게 자극하고 싶은 제품에 적합",
+    styleClass: "bg-[#0A0A0A] border-red-600 text-white",
+    accentColor: "#E63946",
+  },
 ];
 
 export default function ToneSelectPage() {
@@ -203,6 +211,7 @@ export default function ToneSelectPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
           {TONE_LIST.map((tone) => {
             const isSelected = selectedTone === tone.id;
+            const isStimulus = tone.id === "stimulus";
             return (
               <div
                 key={tone.id}
@@ -225,16 +234,16 @@ export default function ToneSelectPage() {
                 </div>
 
                 {/* 본문 설명 */}
-                <div className="bg-white p-5 flex-1 flex flex-col justify-between">
+                <div className={`p-5 flex-1 flex flex-col justify-between ${isStimulus ? "bg-[#0A0A0A]" : "bg-white"}`}>
                   <div>
                     <p className="text-xs text-gray-400 font-semibold tracking-wider mb-2">추천 카테고리</p>
-                    <p className="text-xs font-bold text-gray-700 mb-4">{tone.badge}</p>
+                    <p className={`text-xs font-bold mb-4 ${isStimulus ? "text-gray-200" : "text-gray-700"}`}>{tone.badge}</p>
 
                     <p className="text-xs text-gray-400 font-semibold tracking-wider mb-2">톤 특징</p>
-                    <p className="text-sm text-gray-600 leading-relaxed mb-4">{tone.description}</p>
+                    <p className={`text-sm leading-relaxed mb-4 ${isStimulus ? "text-gray-300" : "text-gray-600"}`}>{tone.description}</p>
                   </div>
 
-                  <div className="pt-4 border-t border-gray-100 flex items-center justify-end">
+                  <div className={`pt-4 border-t flex items-center justify-end ${isStimulus ? "border-white/10" : "border-gray-100"}`}>
                     <button
                       type="button"
                       className={`text-xs font-bold px-4 py-2 rounded-xl transition-colors ${
@@ -304,7 +313,7 @@ export default function ToneSelectPage() {
                   className="text-base font-bold text-gray-900 leading-snug"
                   style={{ fontFamily: font.cssFamily }}
                 >
-                  와디즈 펀딩
+                  폰트 스타일
                 </div>
                 <div className="text-xs text-gray-500 mt-1.5 font-medium">{font.label}</div>
               </button>
