@@ -64,6 +64,7 @@ export async function getActiveSession(userId: string) {
     formStep: data.formStep as number | undefined,
     selectedTone: data.selectedTone as string | undefined,
     fontChoice: data.fontChoice as string | undefined,
+    colorChoice: data.colorChoice as string | undefined,
     shareId: data.shareId as string | undefined,
     assets: data.assets as Record<string, string> | undefined,
     designResult: data.designResult as import("./types").DesignResult | undefined,
@@ -106,6 +107,7 @@ export async function getSessionById(sessionId: string, userId: string) {
     formStep: data.formStep as number | undefined,
     selectedTone: data.selectedTone as string | undefined,
     fontChoice: data.fontChoice as string | undefined,
+    colorChoice: data.colorChoice as string | undefined,
     shareId: data.shareId as string | undefined,
     assets: data.assets as Record<string, string> | undefined,
     designResult: data.designResult as import("./types").DesignResult | undefined,
@@ -136,6 +138,7 @@ export async function createSession(userId: string, productName: string) {
     // 디자인 설정 초기값
     selectedTone: "",
     fontChoice: "recommended",
+    colorChoice: "recommended",
     shareId: "",
     assets: {},
     designResult: null,
@@ -310,6 +313,12 @@ export async function incrementSectionRegen(sessionId: string) {
 export async function updateFontChoice(sessionId: string, fontChoice: string) {
   const ref = doc(db, "sessions", sessionId);
   await updateDoc(ref, { fontChoice });
+}
+
+/** 포인트 컬러 선택 저장 */
+export async function updateColorChoice(sessionId: string, colorChoice: string) {
+  const ref = doc(db, "sessions", sessionId);
+  await updateDoc(ref, { colorChoice });
 }
 
 /** shareId 발급 및 저장 (없을 때만 신규 발급) */

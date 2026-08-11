@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { getSessionById, reactivateSession, updateDesignTone, updateFontChoice, incrementDesignGen } from "@/lib/session";
+import { getSessionById, reactivateSession, updateDesignTone, updateFontChoice, updateColorChoice, incrementDesignGen } from "@/lib/session";
 import { FONT_OPTIONS, TONE_RECOMMENDED_FONT } from "@/components/design-system/fonts";
+import { getToneById } from "@/components/design-system/tones";
 import { ArrowLeft, Sparkles, AlertTriangle, Check } from "lucide-react";
 
 interface ToneItem {
@@ -66,6 +67,7 @@ export default function ToneSelectPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const [selectedTone, setSelectedTone] = useState<string>("");
   const [selectedFont, setSelectedFont] = useState<string>("recommended");
+  const [selectedColor, setSelectedColor] = useState<string>("recommended");
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
@@ -100,6 +102,7 @@ export default function ToneSelectPage() {
         setSession(target);
         if (target.selectedTone) setSelectedTone(target.selectedTone);
         if (target.fontChoice) setSelectedFont(target.fontChoice);
+        if (target.colorChoice) setSelectedColor(target.colorChoice);
       })
       .catch((err) => {
         console.error("세션 로드 오류:", err);
@@ -137,6 +140,7 @@ export default function ToneSelectPage() {
       // 디자인 톤 + 폰트 DB 저장
       await updateDesignTone(session.id, selectedTone);
       await updateFontChoice(session.id, selectedFont || "recommended");
+      await updateColorChoice(session.id, selectedColor || "recommended");
 
       // 다음 업로드 단계로 이동
       router.push(`/generate/upload/${session.id}`);
@@ -306,6 +310,68 @@ export default function ToneSelectPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* 포인트 컬러 선택 */}
+        <div className="mb-12">
+          <div className="mb-6">
+            <h2 className="text-xl font-black text-gray-900 mb-1">포인트 컬러를 선택해 주세요</h2>
+            <p className="text-sm text-gray-500">선택하지 않으면 선택한 톤에 맞는 추천 컬러가 자동 적용됩니다.</p>
+          </div>
+
+          {selectedTone ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+              {/* 추천 옵션 */}
+              <button
+                onClick={() => setSelectedColor("recommended")}
+                className={`relative border-2 rounded-2xl p-4 text-left transition-all duration-200 ${
+                  selectedColor === "recommended"
+                    ? "border-blue-600 bg-blue-50 shadow-md"
+                    : "border-gray-200 bg-white hover:border-gray-300"
+                }`}
+              >
+                {selectedColor === "recommended" && (
+                  <span className="absolute top-2 right-2 bg-blue-600 text-white rounded-full p-0.5">
+                    <Check className="w-3 h-3" />
+                  </span>
+                )}
+                <div
+                  className="w-6 h-6 rounded-full mb-2 border border-black/10"
+                  style={{ backgroundColor: getToneById(selectedTone)?.accentColor ?? "#000000" }}
+                />
+                <div className="text-xs font-bold text-blue-600">추천</div>
+                <div className="text-sm font-bold text-gray-900 mt-0.5">자동 적용</div>
+              </button>
+
+              {/* 톤별 컬러 프리셋 */}
+              {(getToneById(selectedTone)?.accentPresets ?? []).map((preset) => (
+                <button
+                  key={preset.id}
+                  onClick={() => setSelectedColor(preset.id)}
+                  className={`relative border-2 rounded-2xl p-4 text-left transition-all duration-200 ${
+                    selectedColor === preset.id
+                      ? "border-blue-600 bg-blue-50 shadow-md"
+                      : "border-gray-200 bg-white hover:border-gray-300"
+                  }`}
+                >
+                  {selectedColor === preset.id && (
+                    <span className="absolute top-2 right-2 bg-blue-600 text-white rounded-full p-0.5">
+                      <Check className="w-3 h-3" />
+                    </span>
+                  )}
+                  <div
+                    className="w-6 h-6 rounded-full mb-2 border border-black/10"
+                    style={{ backgroundColor: preset.hex }}
+                  />
+                  <div className="text-sm font-bold text-gray-900">{preset.label}</div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-gray-400 border border-dashed border-gray-200 rounded-2xl p-6 text-center">
+              톤을 먼저 선택해 주세요
+            </div>
+          )}
         </div>
 
         {/* 하단 행동 버튼 */}

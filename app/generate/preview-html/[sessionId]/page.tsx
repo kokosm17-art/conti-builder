@@ -18,6 +18,7 @@ interface SectionMeta {
   id: string;
   label: string;
   slotId: string | null;
+  kind?: "section" | "copy";
 }
 
 // ─── DOM 유틸 ─────────────────────────────────────────────────────────────────
@@ -80,6 +81,30 @@ function replaceSectionInHtml(fullHtml: string, sectionId: string, newSectionHtm
   return "<!DOCTYPE html>" + domDoc.documentElement.outerHTML;
 }
 
+// 카피 문단(<p>) 단위 수정: 빈 줄로 나뉜 각 <p>를 "section[id] > p" 순서상 인덱스(cN)로 식별.
+// buildInteractiveHtml()과 항상 같은 fullHtml을 파싱하므로 인덱스가 어긋나지 않는다.
+function extractCopyHtml(fullHtml: string, copyId: string): string {
+  const idx = parseInt(copyId.replace(/^c/, ""), 10) - 1;
+  const parser = new DOMParser();
+  const domDoc = parser.parseFromString(fullHtml, "text/html");
+  const paragraphs = domDoc.querySelectorAll("section[id] > p");
+  return paragraphs[idx]?.outerHTML ?? "";
+}
+
+function replaceCopyInHtml(fullHtml: string, copyId: string, newCopyHtml: string): string {
+  const idx = parseInt(copyId.replace(/^c/, ""), 10) - 1;
+  const parser = new DOMParser();
+  const domDoc = parser.parseFromString(fullHtml, "text/html");
+  const target = domDoc.querySelectorAll("section[id] > p")[idx];
+  if (!target) return fullHtml;
+  const wrapper = domDoc.createElement("div");
+  wrapper.innerHTML = newCopyHtml;
+  const replacement = wrapper.firstElementChild;
+  if (!replacement) return fullHtml;
+  target.replaceWith(replacement);
+  return "<!DOCTYPE html>" + domDoc.documentElement.outerHTML;
+}
+
 /**
  * fullHtml에 인터랙티브 오버레이 추가:
  * - 이미지 슬롯: 클릭 가능한 placeholder(카메라 아이콘 + 설명) + postMessage
@@ -94,11 +119,11 @@ function buildInteractiveHtml(html: string): string {
   const style = domDoc.createElement("style");
   style.id = "ci-overlay-styles";
   style.textContent = `
-    .ci-wrap{display:block;cursor:pointer;overflow:hidden;}
-    .ci-wrap.ci-ratio{position:relative;aspect-ratio:4/3;}
-    .ci-wrap.ci-hero{position:absolute;inset:0;}
+    .ci-wrap{display:block!important;cursor:pointer;overflow:hidden;}
+    .ci-wrap.ci-ratio{position:relative!important;aspect-ratio:4/3!important;width:auto!important;height:auto!important;}
+    .ci-wrap.ci-hero{position:absolute!important;inset:0!important;width:auto!important;height:auto!important;}
     .ci-ph{
-      position:absolute;inset:0;
+      position:absolute!important;inset:0!important;
       display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
       background:#f1f2f5;border:2px dashed #c9cdd4;z-index:50;
       transition:background .15s;
@@ -118,7 +143,8 @@ function buildInteractiveHtml(html: string): string {
     .ci-wrap:hover .ci-chg{opacity:1;}
     section{position:relative!important;}
     .ci-edit-btn{
-      position:absolute;top:10px;right:10px;
+      position:absolute!important;top:10px!important;right:10px!important;left:auto!important;bottom:auto!important;
+      width:auto!important;height:auto!important;align-self:auto!important;flex:none!important;
       background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;
       padding:5px 12px;font-size:11px;font-weight:700;color:#374151;
       cursor:pointer;display:flex;align-items:center;gap:5px;
@@ -127,6 +153,17 @@ function buildInteractiveHtml(html: string): string {
       font-family:sans-serif;
     }
     section:hover>.ci-edit-btn{opacity:1;}
+    .ci-copy-edit-btn{
+      position:absolute!important;top:4px!important;right:4px!important;left:auto!important;bottom:auto!important;
+      width:auto!important;height:auto!important;align-self:auto!important;flex:none!important;
+      background:#fff;border:1.5px solid #e2e8f0;border-radius:7px;
+      padding:3px 9px;font-size:10px;font-weight:700;color:#374151;
+      cursor:pointer;display:flex;align-items:center;gap:4px;
+      box-shadow:0 2px 6px rgba(0,0,0,.08);z-index:20;
+      opacity:0;transition:opacity .2s;pointer-events:auto;
+      font-family:sans-serif;
+    }
+    p[data-copy-id]:hover>.ci-copy-edit-btn{opacity:1;}
   `;
   domDoc.head.appendChild(style);
 
@@ -177,6 +214,18 @@ function buildInteractiveHtml(html: string): string {
     sec.appendChild(btn);
   });
 
+  // 카피 문단(빈 줄로 나뉜 각 <p>)마다 개별 [수정] 버튼 추가
+  domDoc.querySelectorAll("section[id] > p").forEach((p, idx) => {
+    const copyId = `c${idx + 1}`;
+    p.setAttribute("data-copy-id", copyId);
+    (p as HTMLElement).style.position = "relative";
+    const btn = domDoc.createElement("button");
+    btn.className = "ci-copy-edit-btn";
+    btn.setAttribute("data-edit-copy", copyId);
+    btn.innerHTML = `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>수정`;
+    p.appendChild(btn);
+  });
+
   // postMessage 스크립트 주입
   const script = domDoc.createElement("script");
   script.textContent = `
@@ -197,6 +246,12 @@ function buildInteractiveHtml(html: string): string {
     btn.addEventListener('click',function(e){
       e.stopPropagation();
       window.parent.postMessage({type:'EDIT_CLICK',sectionId:btn.getAttribute('data-edit-sec')},'*');
+    });
+  });
+  document.querySelectorAll('[data-edit-copy]').forEach(function(btn){
+    btn.addEventListener('click',function(e){
+      e.stopPropagation();
+      window.parent.postMessage({type:'COPY_EDIT_CLICK',copyId:btn.getAttribute('data-edit-copy')},'*');
     });
   });
 
@@ -232,6 +287,7 @@ export default function PreviewHtmlPage() {
   const [sectionMetas, setSectionMetas] = useState<SectionMeta[]>([]);
   const [assets, setAssets] = useState<Record<string, string>>({});
   const [toneId, setToneId] = useState("minimal");
+  const [colorChoice, setColorChoice] = useState("recommended");
   const [designEditCount, setDesignEditCount] = useState(0);
   const [designGenCount, setDesignGenCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -269,6 +325,7 @@ export default function PreviewHtmlPage() {
     if (data.userId !== user!.uid) { router.push("/generate"); return; }
 
     setToneId(data.selectedTone ?? "minimal");
+    setColorChoice(data.colorChoice ?? "recommended");
     setDesignEditCount(data.designEditCount ?? 0);
     setDesignGenCount(data.designGenCount ?? 0);
 
@@ -348,10 +405,20 @@ export default function PreviewHtmlPage() {
           setEditInstruction("");
         }
       }
+
+      if (e.data.type === "COPY_EDIT_CLICK") {
+        const copyId = e.data.copyId as string;
+        const copyHtml = extractCopyHtml(fullHtml, copyId);
+        const text = new DOMParser().parseFromString(copyHtml, "text/html").body.textContent
+          ?.trim().replace(/\s+/g, " ") ?? "";
+        const label = text ? text.substring(0, 30) + (text.length > 30 ? "…" : "") : "카피 문단";
+        setEditingMeta({ id: copyId, label, slotId: null, kind: "copy" });
+        setEditInstruction("");
+      }
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, [sectionMetas]);
+  }, [sectionMetas, fullHtml]);
 
   // ── 이미지 업로드 ────────────────────────────────────────────────────────
 
@@ -371,31 +438,41 @@ export default function PreviewHtmlPage() {
     }
   }
 
-  // ── 섹션 AI 수정 ─────────────────────────────────────────────────────────
+  // ── 섹션/카피 AI 수정 ────────────────────────────────────────────────────
 
-  async function handleSectionEdit() {
+  async function handleEditSubmit() {
     if (!editingMeta || !editingMeta.id) return;
     if (designEditCount >= 30) { alert("디자인 수정 횟수(최대 30회)를 모두 사용하셨습니다."); return; }
     const instruction = editInstruction.trim();
     if (!instruction) return;
 
-    const sectionHtml = extractSectionHtml(fullHtml, editingMeta.id);
-    if (!sectionHtml) { alert("섹션을 찾을 수 없습니다."); return; }
+    const isCopy = editingMeta.kind === "copy";
+    const targetHtml = isCopy
+      ? extractCopyHtml(fullHtml, editingMeta.id)
+      : extractSectionHtml(fullHtml, editingMeta.id);
+    if (!targetHtml) { alert(isCopy ? "문단을 찾을 수 없습니다." : "섹션을 찾을 수 없습니다."); return; }
 
     setEditLoading(true);
     try {
-      const res = await fetch("/api/design/edit-section-html", {
+      const res = await fetch(isCopy ? "/api/design/edit-copy-html" : "/api/design/edit-section-html", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sectionHtml, instruction, toneId }),
+        body: JSON.stringify(
+          isCopy
+            ? { copyHtml: targetHtml, instruction, toneId, colorChoice }
+            : { sectionHtml: targetHtml, instruction, toneId, colorChoice }
+        ),
       });
       if (!res.ok) throw new Error("수정 실패");
-      const { sectionHtml: updatedHtml } = await res.json();
+      const data = await res.json();
+      const updatedHtml = isCopy ? data.copyHtml : data.sectionHtml;
 
-      const newFullHtml = replaceSectionInHtml(fullHtml, editingMeta.id, updatedHtml);
+      const newFullHtml = isCopy
+        ? replaceCopyInHtml(fullHtml, editingMeta.id, updatedHtml)
+        : replaceSectionInHtml(fullHtml, editingMeta.id, updatedHtml);
       setFullHtml(newFullHtml);
       setSectionMetas(parseSectionMetas(newFullHtml, sectionIds));
-      setIframeKey((k) => k + 1); // 섹션 수정 후 iframe 재마운트
+      setIframeKey((k) => k + 1); // 수정 후 iframe 재마운트
 
       await saveHtmlDesignEdit(sessionId, newFullHtml, designEditCount);
       setDesignEditCount((c) => c + 1);
@@ -415,7 +492,7 @@ export default function PreviewHtmlPage() {
   // ── 전체 재생성 ──────────────────────────────────────────────────────────
 
   async function handleFullRegen() {
-    if (designGenCount >= 5) { alert("재생성 횟수(최대 5회)를 모두 사용하셨습니다."); return; }
+    if (designGenCount >= 9999) { alert("재생성 횟수(최대 5회)를 모두 사용하셨습니다."); return; } // TEMP: 로컬 테스트용 한도 해제, 테스트 후 5로 복원할 것
     if (!confirm("전체 디자인을 다시 생성할까요? 현재 디자인이 교체됩니다.")) return;
     if (!user) return;
     try {
@@ -491,7 +568,7 @@ export default function PreviewHtmlPage() {
   }
 
   const remainingEdit = Math.max(0, 30 - designEditCount);
-  const remainingRegen = Math.max(0, 5 - designGenCount);
+  const remainingRegen = Math.max(0, 9999 - designGenCount); // TEMP: 로컬 테스트용 한도 해제, 테스트 후 5로 복원할 것
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
@@ -587,7 +664,7 @@ export default function PreviewHtmlPage() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-widest mb-0.5">
-                  섹션 편집
+                  {editingMeta.kind === "copy" ? "카피 편집" : "섹션 편집"}
                 </p>
                 <p className="text-sm font-bold text-gray-900 truncate">{editingMeta.label}</p>
               </div>
@@ -635,7 +712,7 @@ export default function PreviewHtmlPage() {
                     rows={3}
                     className="w-full text-sm border border-gray-200 rounded-xl px-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 resize-none bg-gray-50 placeholder:text-gray-400"
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSectionEdit();
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleEditSubmit();
                     }}
                   />
                   <div className="flex gap-2 mt-3">
@@ -646,7 +723,7 @@ export default function PreviewHtmlPage() {
                       닫기
                     </button>
                     <button
-                      onClick={handleSectionEdit}
+                      onClick={handleEditSubmit}
                       disabled={editLoading || !editInstruction.trim()}
                       className="flex-[2] text-sm font-bold py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
                     >

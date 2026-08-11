@@ -1,3 +1,9 @@
+export interface AccentPreset {
+  id: string;
+  hex: string;
+  label: string;
+}
+
 export interface ToneConfig {
   id: string;
   name: string;
@@ -7,6 +13,7 @@ export interface ToneConfig {
   background: string;
   textColor: string;
   accentColor: string;
+  accentPresets: AccentPreset[];
   recommendedFont: string;
   mood: string;
   cardStyleClass: string;
@@ -23,6 +30,12 @@ export const TONES: ToneConfig[] = [
     background: "#FAF8F5",
     textColor: "#1A1A1A",
     accentColor: "#8C6239",
+    accentPresets: [
+      { id: "deepgreen", hex: "#2F5233", label: "딥그린" },
+      { id: "burgundy", hex: "#7A2E2E", label: "버건디" },
+      { id: "navy", hex: "#2C3E5C", label: "네이비" },
+      { id: "mustard", hex: "#B8860B", label: "머스타드" },
+    ],
     recommendedFont: "Pretendard",
     mood: "여백이 부드럽고 차분한 스토리북 느낌",
     cardStyleClass: "bg-[#FAF8F5] border-amber-200 text-[#1A1A1A]",
@@ -37,6 +50,12 @@ export const TONES: ToneConfig[] = [
     background: "#0A0A0A",
     textColor: "#FFFFFF",
     accentColor: "#a855f7",
+    accentPresets: [
+      { id: "cyan", hex: "#38bdf8", label: "시안블루" },
+      { id: "pink", hex: "#ec4899", label: "핑크" },
+      { id: "red", hex: "#ef4444", label: "레드" },
+      { id: "gold", hex: "#eab308", label: "골드" },
+    ],
     recommendedFont: "Noto Sans CJK KR",
     mood: "스포트라이트 오버레이 및 힙한 테크 감성",
     cardStyleClass: "bg-[#0A0A0A] border-purple-900 text-white",
@@ -51,6 +70,12 @@ export const TONES: ToneConfig[] = [
     background: "#FFFFFF",
     textColor: "#111111",
     accentColor: "#FF4500",
+    accentPresets: [
+      { id: "hotpink", hex: "#FF3D8E", label: "핫핑크" },
+      { id: "lime", hex: "#84CC16", label: "라임그린" },
+      { id: "skyblue", hex: "#0EA5E9", label: "스카이블루" },
+      { id: "violet", hex: "#8B5CF6", label: "바이올렛" },
+    ],
     recommendedFont: "Gmarket Sans",
     mood: "형광 톤 컬러 태그, 굵고 볼드한 문장 중심",
     cardStyleClass: "bg-[#FFFFFF] border-orange-200 text-gray-900",
@@ -65,6 +90,12 @@ export const TONES: ToneConfig[] = [
     background: "#E8E0D8",
     textColor: "#1E1E1E",
     accentColor: "#2B4F8C",
+    accentPresets: [
+      { id: "burgundy", hex: "#6B2737", label: "버건디" },
+      { id: "forestgreen", hex: "#2F4F3E", label: "포레스트그린" },
+      { id: "bronze", hex: "#8C6A3F", label: "브론즈" },
+      { id: "black", hex: "#1E1E1E", label: "블랙" },
+    ],
     recommendedFont: "바른바탕체",
     mood: "극도의 고급스러운 여백, 클래식한 세리프",
     cardStyleClass: "bg-[#E8E0D8] border-yellow-700/20 text-[#1E1E1E]",
@@ -79,6 +110,12 @@ export const TONES: ToneConfig[] = [
     background: "#FFFFFF",
     textColor: "#444444",
     accentColor: "#222222",
+    accentPresets: [
+      { id: "grayblue", hex: "#5B7A94", label: "그레이블루" },
+      { id: "sagegreen", hex: "#6B8A6E", label: "세이지그린" },
+      { id: "terracotta", hex: "#B5654A", label: "테라코타" },
+      { id: "deeppurple", hex: "#5B4B8A", label: "딥퍼플" },
+    ],
     recommendedFont: "노토산스 KR",
     mood: "제품이 인테리어 오브제처럼 돋보이는 얇은 폰트",
     cardStyleClass: "bg-[#FFFFFF] border-gray-200 text-gray-700",
@@ -87,4 +124,13 @@ export const TONES: ToneConfig[] = [
 
 export function getToneById(id: string): ToneConfig | undefined {
   return TONES.find((t) => t.id === id);
+}
+
+// 톤 기본 추천 색상 + 프리셋 중 실제 적용할 포인트 컬러 반환 (tone id + colorChoice 기준)
+export function getAppliedAccentColor(toneId: string, colorChoice?: string): string {
+  const tone = getToneById(toneId);
+  if (!tone) return "#000000";
+  if (!colorChoice || colorChoice === "recommended") return tone.accentColor;
+  const preset = tone.accentPresets.find((p) => p.id === colorChoice);
+  return preset?.hex ?? tone.accentColor;
 }

@@ -42,6 +42,7 @@ export function DesignRenderer({
     background: "#FFFFFF",
     textColor: "#444444",
     accentColor: "#222222",
+    accentPresets: [],
     recommendedFont: "Noto Sans KR",
     mood: "",
     cardStyleClass: "",

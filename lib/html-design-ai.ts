@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { HtmlDesignResult } from "./types";
-import { getToneById, ToneConfig } from "@/components/design-system/tones";
+import { getToneById, getAppliedAccentColor, ToneConfig } from "@/components/design-system/tones";
 import { parseSections } from "./format-output";
 
 /**
@@ -670,10 +670,14 @@ function getMaxSectionN(html: string): number {
 export async function generateHtmlDesign(
   contiText: string,
   toneId: string,
-  fontChoice: string
+  fontChoice: string,
+  colorChoice?: string
 ): Promise<HtmlDesignResult> {
-  const tone = getToneById(toneId);
-  if (!tone) throw new Error(`알 수 없는 톤: ${toneId}`);
+  const baseTone = getToneById(toneId);
+  if (!baseTone) throw new Error(`알 수 없는 톤: ${toneId}`);
+  // 고객이 고른 포인트 컬러를 톤 기본값 위에 덮어써서, 이후 모든 생성 단계가
+  // 이 tone 객체 하나만 참조하면 자동으로 선택한 색상을 쓰게 한다.
+  const tone: ToneConfig = { ...baseTone, accentColor: getAppliedAccentColor(toneId, colorChoice) };
 
   const { processedText, slotIds } = preprocessConti(contiText);
   const { importCss, fontFamily } = getGoogleFont(toneId, fontChoice);
@@ -847,10 +851,10 @@ function extractSectionIds(html: string): string[] {
 export async function editSectionHtml(
   sectionHtml: string,
   instruction: string,
-  toneId: string
+  toneId: string,
+  colorChoice?: string
 ): Promise<string> {
-  const tone = getToneById(toneId);
-  const accentColor = tone?.accentColor ?? "#000000";
+  const accentColor = getAppliedAccentColor(toneId, colorChoice);
 
   const systemText = `You are editing one section of a Korean product detail page.
 
@@ -883,10 +887,10 @@ Return ONLY the updated <section>...</section>. No explanation. No markdown fenc
 export async function editCopyHtml(
   copyHtml: string,
   instruction: string,
-  toneId: string
+  toneId: string,
+  colorChoice?: string
 ): Promise<string> {
-  const tone = getToneById(toneId);
-  const accentColor = tone?.accentColor ?? "#000000";
+  const accentColor = getAppliedAccentColor(toneId, colorChoice);
 
   const systemText = `You are editing one paragraph of copy text within a Korean product detail page.
 

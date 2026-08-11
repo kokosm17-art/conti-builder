@@ -3,7 +3,7 @@ import { editSectionHtml } from "@/lib/html-design-ai";
 
 export async function POST(req: NextRequest) {
   try {
-    const { sectionHtml, instruction, toneId } = await req.json();
+    const { sectionHtml, instruction, toneId, colorChoice } = await req.json();
 
     if (!sectionHtml || !instruction) {
       return NextResponse.json({ error: "섹션 HTML 또는 수정 지시사항 없음" }, { status: 400 });
@@ -12,7 +12,8 @@ export async function POST(req: NextRequest) {
     const updatedHtml = await editSectionHtml(
       sectionHtml,
       instruction,
-      toneId ?? "minimal"
+      toneId ?? "minimal",
+      colorChoice ?? "recommended"
     );
 
     return NextResponse.json({ success: true, sectionHtml: updatedHtml });

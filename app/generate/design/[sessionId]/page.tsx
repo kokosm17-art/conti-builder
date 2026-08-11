@@ -49,7 +49,7 @@ export default function DesignGeneratePage() {
         return;
       }
 
-      if (session.designGenCount >= 5) {
+      if (session.designGenCount >= 9999) { // TEMP: 로컬 테스트용 한도 해제, 테스트 후 5로 복원할 것
         if (!cancelled) setError("디자인 재생성 횟수(최대 5회)를 모두 소진하셨습니다.");
         return;
       }
@@ -67,6 +67,7 @@ export default function DesignGeneratePage() {
             contiText: session.contiText,
             selectedTone: session.selectedTone ?? "minimal",
             fontChoice: session.fontChoice ?? "recommended",
+            colorChoice: session.colorChoice ?? "recommended",
           }),
         });
 
