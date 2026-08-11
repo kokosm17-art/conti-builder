@@ -13,7 +13,6 @@ interface ToneItem {
   name: string;
   badge: string;
   description: string;
-  recommend: string;
   styleClass: string;
   accentColor: string;
 }
@@ -24,7 +23,6 @@ const TONE_LIST: ToneItem[] = [
     name: "감성 톤",
     badge: "테크 / 홈리빙 / 스포츠 / 아웃도어",
     description: "어두운 배경 사진 위 큼직한 흰색 폰트로 불편함(문제) ➔ 해결 스토리를 강렬하게 전개. 심플하고 강한 첫인상, 제품의 실용성과 신뢰감을 빠르게 전달하고 싶은 제품에 적합",
-    recommend: "한일전기 이동식 에어컨 레퍼런스",
     styleClass: "bg-[#FAF8F5] border-amber-200 text-[#1A1A1A]",
     accentColor: "#8C6239",
   },
@@ -33,7 +31,6 @@ const TONE_LIST: ToneItem[] = [
     name: "씨네마틱 톤",
     badge: "테크 / 홈리빙 / 스포츠",
     description: "애플 st 상세페이지 디자인. 블랙 배경에 흰색 폰트가 기본. 스포트라이트 조명과 컬러 그라디언트 키워드로 프리미엄 테크 무드 연출. 혁신적이고 세련된 이미지를 강조하고 싶은 제품에 적합",
-    recommend: "Hey2 AI 안경 레퍼런스",
     styleClass: "bg-[#0A0A0A] border-purple-900 text-white",
     accentColor: "#a855f7",
   },
@@ -42,7 +39,6 @@ const TONE_LIST: ToneItem[] = [
     name: "임팩트 톤",
     badge: "언더웨어 / 기능성 패션 / 뷰티",
     description: "밝고 따뜻한 크림-화이트 배경에 포인트 컬러(핑크·오렌지 등) 키워드 강조. 실생활 공감형 카피와 제품 클로즈업으로 구성. 감성적 공감과 기능성을 동시에 어필하고 싶은 제품에 적합",
-    recommend: "타밈 젤리브라 + fhui 선데이션",
     styleClass: "bg-[#FFFFFF] border-orange-200 text-gray-900",
     accentColor: "#ff4500",
   },
@@ -51,7 +47,6 @@ const TONE_LIST: ToneItem[] = [
     name: "프리미엄 톤",
     badge: "프리미엄 패션 / 프리미엄 홈리빙",
     description: "베이지-그레이지 배경에 세리프 계열 폰트와 넉넉한 여백 중심 구성. 텍스트보다 이미지 비중이 높고, 소재·품질·디테일 클로즈업으로 브랜드 헤리티지를 전달. 고가 제품의 가치를 조용하고 품위 있게 표현하고 싶은 제품에 적합",
-    recommend: "ALLRESET 명품 데님 레퍼런스",
     styleClass: "bg-[#E8E0D8] border-yellow-700/20 text-[#1E1E1E] font-serif",
     accentColor: "#2B4F8C",
   },
@@ -60,7 +55,6 @@ const TONE_LIST: ToneItem[] = [
     name: "미니멀 톤",
     badge: "테크 / 리빙 / 패션",
     description: "순백 배경 + 자연광 연출로 제품을 인테리어 오브제처럼 표현. 텍스트는 최소화하고 제품 비주얼과 여백이 중심. 디자인 자체가 경쟁력인 제품, 라이프스타일 감성을 담고 싶은 제품에 적합",
-    recommend: "신일 무선 BLDC팬 레퍼런스",
     styleClass: "bg-[#FFFFFF] border-gray-200 text-gray-700",
     accentColor: "#444444",
   },
@@ -129,7 +123,7 @@ export default function ToneSelectPage() {
 
       // 이미 톤이 설정되어 있는데 다른 톤으로 변경하는 경우 디자인 재생성 카운트 확인 및 차감
       if (session.selectedTone && isNewTone) {
-        if (session.designGenCount >= 5) {
+        if (session.designGenCount >= 9999) { // TEMP: 로컬 테스트용 한도 해제, 테스트 후 5로 복원할 것
           alert("디자인 재생성 횟수(최대 5회)를 모두 소진하셨습니다. 기존 톤으로만 제작 가능합니다.");
           setSelectedTone(session.selectedTone);
           setSaving(false);
@@ -163,7 +157,7 @@ export default function ToneSelectPage() {
   }
 
   // 남은 재생성 횟수 계산
-  const remainingGen = session ? Math.max(0, 5 - session.designGenCount) : 0;
+  const remainingGen = session ? Math.max(0, 9999 - session.designGenCount) : 0; // TEMP: 로컬 테스트용 한도 해제, 테스트 후 5로 복원할 것
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 pb-20">
@@ -175,7 +169,7 @@ export default function ToneSelectPage() {
           </Link>
           <div className="flex items-center gap-2">
             <span className="text-xs bg-blue-100 text-blue-800 font-bold px-3 py-1.5 rounded-full">
-              디자인 자동화 ✦ 1단계
+              디자인 생성 ✦ 1단계
             </span>
           </div>
         </div>
@@ -236,10 +230,7 @@ export default function ToneSelectPage() {
                     <p className="text-sm text-gray-600 leading-relaxed mb-4">{tone.description}</p>
                   </div>
 
-                  <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
-                    <span className="text-[11px] text-blue-600 bg-blue-50 px-2 py-1 rounded font-semibold">
-                      {tone.recommend}
-                    </span>
+                  <div className="pt-4 border-t border-gray-100 flex items-center justify-end">
                     <button
                       type="button"
                       className={`text-xs font-bold px-4 py-2 rounded-xl transition-colors ${
