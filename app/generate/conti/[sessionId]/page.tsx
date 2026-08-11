@@ -39,6 +39,9 @@ export default function ContiViewPage() {
   const [copied, setCopied] = useState(false);
   const [changedSections, setChangedSections] = useState<Map<string, SectionChangeInfo>>(new Map());
   const titleRef = useRef<HTMLDivElement>(null);
+  const introIntentRef = useRef<HTMLDivElement>(null);
+  const mainIntentRef = useRef<HTMLDivElement>(null);
+  const conclusionIntentRef = useRef<HTMLDivElement>(null);
   const introRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLDivElement>(null);
   const conclusionRef = useRef<HTMLDivElement>(null);
@@ -76,7 +79,7 @@ export default function ContiViewPage() {
   }, [user, authLoading, sessionId, router]);
 
   async function handleRegenerate() {
-    if (contiGenCount >= 10) {
+    if (contiGenCount >= 9999) { // TEMP: 로컬 테스트용 한도 해제, 테스트 후 10으로 복원할 것
       alert("재생성 횟수(최대 10회)를 모두 사용하셨습니다.");
       return;
     }
@@ -164,7 +167,10 @@ export default function ContiViewPage() {
       setTimeout(() => setChangedSections(new Map()), 30000);
 
       const sectionRefMap: Record<string, React.RefObject<HTMLDivElement | null>> = {
-        title: titleRef, intro: introRef, main: mainRef, conclusion: conclusionRef,
+        title: titleRef,
+        intro: changed.get("intro")?.intent ? introIntentRef : introRef,
+        main: changed.get("main")?.intent ? mainIntentRef : mainRef,
+        conclusion: changed.get("conclusion")?.intent ? conclusionIntentRef : conclusionRef,
       };
       const firstChanged = ["title", "intro", "main", "conclusion"].find(k => changed.has(k));
       if (firstChanged) {
@@ -252,7 +258,7 @@ export default function ContiViewPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleRegenerate}
-                disabled={regenerating || generating || contiGenCount >= 10 || !formDraft}
+                disabled={regenerating || generating || contiGenCount >= 9999 || !formDraft} // TEMP: 로컬 테스트용 한도 해제, 테스트 후 10으로 복원할 것
                 className="text-sm font-semibold text-gray-600 border border-gray-200 rounded-lg px-4 py-2 hover:bg-gray-50 disabled:opacity-40 transition-colors flex items-center gap-1.5"
               >
                 {regenerating ? "재생성 중..." : `재생성 (${Math.max(0, 10 - contiGenCount)}/10)`}
@@ -275,22 +281,39 @@ export default function ContiViewPage() {
           <div className="text-center py-24 text-gray-400">아직 생성된 콘티가 없어요.</div>
         ) : (
           <>
-            {parsed && parsed.projectTitles.length > 0 && (
+            {parsed && (parsed.projectTitles.length > 0 || parsed.coreCopies.length > 0) && (
               <div ref={titleRef} className={`bg-white rounded-2xl border p-6 mb-6 transition-all duration-500 ${
                 changedSections.has("title") ? "border-emerald-400 ring-2 ring-emerald-100" : "border-gray-200"
               }`}>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-bold text-gray-400">프로젝트 제목 후보</span>
+                  <span className="text-xs font-bold text-gray-400">
+                    {parsed.coreCopies.length > 0 ? "핵심 카피 후보" : "프로젝트 제목 후보"}
+                  </span>
                   {changedSections.has("title") && <span className="text-xs text-emerald-600">수정 완료 ✓</span>}
                 </div>
-                <ol className="space-y-1 mb-2">
-                  {parsed.projectTitles.map((title, i) => (
-                    <li key={i} className="text-xl font-black text-gray-900">
-                      {i + 1}. {title}
-                    </li>
-                  ))}
-                </ol>
-                {parsed.coreCopy && (
+                {parsed.projectTitles.length > 0 && (
+                  <ol className="space-y-1 mb-2">
+                    {parsed.projectTitles.map((title, i) => (
+                      <li key={i} className="text-xl font-black text-gray-900">
+                        {i + 1}. {title}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                {parsed.coreCopies.length > 0 ? (
+                  <ul className="space-y-3">
+                    {parsed.coreCopies.map((c, i) => (
+                      <li key={i}>
+                        {c.label && (
+                          <span className="inline-block text-xs font-bold text-blue-500 bg-blue-50 rounded-full px-2 py-0.5 mb-1">
+                            {c.label}
+                          </span>
+                        )}
+                        <p className="text-blue-600 font-semibold">{c.text}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : parsed.coreCopy && (
                   <div className="mt-4">
                     <span className="text-xs font-bold text-gray-400 block mb-2">핵심 카피</span>
                     <p className="text-blue-600 font-semibold">{parsed.coreCopy}</p>
@@ -298,19 +321,75 @@ export default function ContiViewPage() {
                 )}
               </div>
             )}
+
+            {parsed && parsed.recommendedNames.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-6">
+                <span className="text-xs font-bold text-gray-400 block mb-3">추천 제품명</span>
+                <ul className="space-y-2">
+                  {parsed.recommendedNames.map((n, i) => (
+                    <li key={i} className="text-gray-900">
+                      <span className="font-bold">{i + 1}. {n.name}</span>
+                      {n.reason && <span className="text-sm text-gray-500"> — {n.reason}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {parsed && (parsed.intro.intent || parsed.main.intent || parsed.conclusion.intent) && (
+              <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-6">
+                <span className="text-xs font-bold text-gray-400 block mb-3">기획 의도</span>
+                <div className="space-y-4">
+                  {parsed.intro.intent && (
+                    <div ref={introIntentRef} className={`rounded-xl p-4 transition-all duration-500 ${
+                      changedSections.get("intro")?.intent ? "bg-emerald-50 ring-2 ring-emerald-100" : "bg-blue-50"
+                    }`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-bold text-blue-500">도입부</span>
+                        {changedSections.get("intro")?.intent && <span className="text-xs text-emerald-600">수정 완료 ✓</span>}
+                      </div>
+                      <p className="text-sm text-blue-800 whitespace-pre-line leading-relaxed">{parsed.intro.intent}</p>
+                    </div>
+                  )}
+                  {parsed.main.intent && (
+                    <div ref={mainIntentRef} className={`rounded-xl p-4 transition-all duration-500 ${
+                      changedSections.get("main")?.intent ? "bg-emerald-50 ring-2 ring-emerald-100" : "bg-blue-50"
+                    }`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-bold text-blue-500">본론부</span>
+                        {changedSections.get("main")?.intent && <span className="text-xs text-emerald-600">수정 완료 ✓</span>}
+                      </div>
+                      <p className="text-sm text-blue-800 whitespace-pre-line leading-relaxed">{parsed.main.intent}</p>
+                    </div>
+                  )}
+                  {parsed.conclusion.intent && (
+                    <div ref={conclusionIntentRef} className={`rounded-xl p-4 transition-all duration-500 ${
+                      changedSections.get("conclusion")?.intent ? "bg-emerald-50 ring-2 ring-emerald-100" : "bg-blue-50"
+                    }`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-bold text-blue-500">결론부</span>
+                        {changedSections.get("conclusion")?.intent && <span className="text-xs text-emerald-600">수정 완료 ✓</span>}
+                      </div>
+                      <p className="text-sm text-blue-800 whitespace-pre-line leading-relaxed">{parsed.conclusion.intent}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-6">
               {parsed?.intro.content ? (
                 <>
                   <div ref={introRef}>
-                    <ContiSectionBlock title="도입부" intent={parsed.intro.intent} content={parsed.intro.content} onCopy={handleCopy}
+                    <ContiSectionBlock title="도입부" content={parsed.intro.content} onCopy={handleCopy}
                       changeInfo={changedSections.get("intro")} />
                   </div>
                   <div ref={mainRef}>
-                    <ContiSectionBlock title="본론부" intent={parsed.main.intent} content={parsed.main.content} onCopy={handleCopy}
+                    <ContiSectionBlock title="본론부" content={parsed.main.content} onCopy={handleCopy}
                       changeInfo={changedSections.get("main")} />
                   </div>
                   <div ref={conclusionRef}>
-                    <ContiSectionBlock title="결론부" intent={parsed.conclusion.intent} content={parsed.conclusion.content} onCopy={handleCopy}
+                    <ContiSectionBlock title="결론부" content={parsed.conclusion.content} onCopy={handleCopy}
                       changeInfo={changedSections.get("conclusion")} />
                   </div>
                 </>

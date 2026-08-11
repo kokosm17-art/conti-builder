@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { HtmlDesignResult } from "./types";
 import { getToneById, ToneConfig } from "@/components/design-system/tones";
+import { parseSections } from "./format-output";
 
 /**
  * LINE BREAKS 규칙 — 이전 버전 백업 (롤백 시 html-design-ai.backup-2026-07-02.ts 참고)
@@ -24,63 +25,25 @@ const IMAGE_LINE_RE = /^\s*\(([^)]+)\)\s*$/;
 
 // ─── 전처리 ─────────────────────────────────────────────────────────────────
 
-// 실제 콘티 출력 포맷(system-prompt.ts E.0 / F.1-2): "## 제목" 3줄 → "**핵심
-// 카피:**" 한 줄 → 그 뒤로 도입부/본론부/결론부가 "---" 구분선으로 나뉘고,
-// 각 섹션은 "기획 의도"를 "> " 인용문 블록으로 먼저 쓴 다음 실제 콘티 본문이
-// 이어진다. 제목·핵심 카피·기획 의도는 전략 설명용 메타 텍스트일 뿐 실제
-// 판매 카피가 아니므로 디자인 생성 입력에 절대 포함되면 안 된다.
-// (이전에는 "## 도입부 기획 의도" 같은, 실제로는 존재하지 않는 헤더를 찾는
-// 로직을 썼다가 매번 매칭에 실패해 원문 전체가 그대로 디자인에 새어나갔다.)
+// 콘티에서 실제 판매 카피(도입부/본론부/결론부 본문)만 뽑아 디자인 생성
+// 입력으로 넘긴다. 제목·핵심 카피·기획 의도는 전략 설명용 메타 텍스트일 뿐
+// 실제 판매 카피가 아니므로 디자인 생성 입력에 절대 포함되면 안 된다.
+//
+// 화면에 도입부/본론부/결론부를 나눠 보여줄 때 이미 쓰고 있는 parseSections()를
+// 그대로 재사용한다 — "도입부"/"본론부"/"결론부" 헤더와 "기획 의도" 여부로
+// 판단하므로, 콘티 안에 "---" 구분선이 몇 번 나오든(예: 각 섹션의 기획 의도
+// 앞뒤로 추가로 나오는 경우) 흔들리지 않는다.
+// (이전에는 "---"가 나올 때마다 새 덩어리로 나눠 앞의 3개만 쓰는 방식이었는데,
+// 실제 콘티에는 "---"가 섹션 전환 지점 외에도 더 나와서 본론부·결론부가
+// 통째로 누락되는 문제가 있었다.)
 function stripMetaFromConti(contiText: string): string {
-  const lines = contiText.split("\n");
+  const { intro, main, conclusion } = parseSections(contiText);
 
-  // 첫 "> " 줄(도입부 기획 의도 시작) 이전은 전부 제목/핵심 카피 영역이므로 제외한다.
-  const firstQuoteIdx = lines.findIndex((l) => l.trim().startsWith(">"));
-  const bodyLines = firstQuoteIdx >= 0 ? lines.slice(firstQuoteIdx) : lines;
-
-  // "---" 구분선 기준으로 도입부/본론부/결론부 3섹션으로 나눈다.
-  const segments: string[][] = [[]];
-  for (const line of bodyLines) {
-    if (line.trim() === "---") {
-      segments.push([]);
-    } else {
-      segments[segments.length - 1].push(line);
-    }
-  }
-
-  function extractContent(segLines: string[]): string {
-    const contentLines: string[] = [];
-    let inIntent = false;
-    let intentDone = false;
-
-    for (const line of segLines) {
-      const trimmed = line.trim();
-
-      if (!intentDone && trimmed.startsWith(">")) {
-        inIntent = true;
-        continue;
-      }
-      // 인용문 블록 안의 빈 줄은 구분자가 아니라 블록의 일부로 취급한다.
-      if (inIntent && trimmed === "") continue;
-      if (inIntent && !trimmed.startsWith(">")) {
-        inIntent = false;
-        intentDone = true;
-      }
-      // AI가 지침을 놓치고 제목·핵심카피를 본문 중간에 다시 쓰는 경우 방지.
-      if (trimmed.startsWith("## ") || trimmed.startsWith("**핵심 카피:**")) continue;
-
-      contentLines.push(line);
-    }
-
-    return contentLines.join("\n").trim();
-  }
-
-  const [introSeg = [], mainSeg = [], conclusionSeg = []] = segments;
-  const combined = [extractContent(introSeg), extractContent(mainSeg), extractContent(conclusionSeg)]
+  const combined = [intro.content, main.content, conclusion.content]
     .filter((c) => c.length > 0)
     .join("\n\n---\n\n");
 
-  // "> " 블록을 하나도 못 찾은 경우(예상 밖 포맷)에는 완전 누락보다 원문을
+  // 세 섹션을 하나도 못 찾은 경우(예상 밖 포맷)에는 완전 누락보다 원문을
   // 그대로 쓰는 편이 안전하다.
   return combined || contiText;
 }
@@ -197,7 +160,9 @@ SHARED CSS CLASS VOCABULARY (use these names consistently — second-pass sectio
 .anim-zoom     zoomIn animation (0.7s, fill:both)
 .badge         small accent pill
 .accent-bar    small decorative bar ONLY (44px×4px fixed size) — NEVER put text/image inside it or use it as a content wrapper. Always use it standalone and empty: <div class="accent-bar"></div>
-.i-divider     short vertical pause divider (2px×32px, centered). A standalone "I" line in CONTENT is NOT the letter I — it marks a rhythm break. Render it as <div class="i-divider"></div>, never as visible text "I".
+.i-divider     short, subtle horizontal pause divider (32px×2px, low opacity, aligned with surrounding text — not centered). A standalone "I" line in CONTENT is NOT the letter I — it marks a rhythm break, and is a rare last resort (see copy rules — should barely ever appear). Render it as <div class="i-divider"></div>, never as visible text "I".
+.s-point-label body-section subheading label — fixed size already defined in <style> (bigger and bolder than regular narrative copy, accent color). NEVER set your own font-size/color for it. A CONTENT line starting with "Point N. " (N = number) is this label: render "POINT N" as <div class="s-point-label">POINT N</div> on its own, then render the rest (the text after "Point N. " on that line, plus any further CONTENT lines that continue the same title with no blank line in between) as a plain <p> right below it with NO class and NO font-size override. This <p> follows the exact same LINE BREAKS rule as regular content below — keep each given CONTENT line's own <br> exactly as written, never merge them into one flowing line, and never let CSS word-wrap split a single given line; if one given line alone still doesn't fit, shrink this <p>'s font-size (never below 35px) instead of letting it wrap.
+.s-card-title  headline/emphasis text inside .s-card (e.g. a USP card in .s-grid) — fixed size already defined in <style>, pre-tuned to the card's OWN width (not the viewport), with a 35px floor built in. Any <p> that is a bold headline/emphasis line inside a .s-card MUST use <p class="s-card-title"> and MUST NOT have any inline style="" or a flat px font-size — cards are much narrower than the full screen, so a viewport-sized or hand-picked px value will overflow and wrap word-by-word. Regular (non-headline) body text inside a .s-card still uses the normal unclassed <p>.
 `.trim();
 
 function getPredefinedCss(tone: ToneConfig, fontFamily: string): string {
@@ -208,6 +173,20 @@ section p {
   font-size: clamp(28px, 5.5vw, 44px);
   font-weight: 700;
   line-height: 1.4;
+  letter-spacing: -0.02em;
+}
+.s-point-label {
+  font-size: clamp(70px, 9vw, 90px);
+  font-weight: 900;
+  color: var(--accent);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+.s-card-title {
+  font-size: clamp(35px, 15cqw, 46px);
+  font-weight: 800;
+  line-height: 1.3;
   letter-spacing: -0.02em;
 }
     `;
@@ -225,6 +204,20 @@ strong {
   -webkit-text-fill-color: transparent;
   color: var(--accent);
 }
+.s-point-label {
+  font-size: clamp(70px, 9vw, 90px);
+  font-weight: 900;
+  color: var(--accent);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+.s-card-title {
+  font-size: clamp(35px, 15cqw, 46px);
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
     `;
   } else if (tone.id === "impact") {
     typographyCss = `
@@ -234,6 +227,20 @@ section p {
   line-height: 1.35;
   letter-spacing: -0.02em;
 }
+.s-point-label {
+  font-size: clamp(70px, 9vw, 90px);
+  font-weight: 900;
+  color: var(--accent);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+.s-card-title {
+  font-size: clamp(35px, 15cqw, 46px);
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
     `;
   } else if (tone.id === "premium") {
     typographyCss = `
@@ -241,6 +248,20 @@ section p {
   font-size: clamp(22px, 4.5vw, 36px);
   font-weight: 400;
   line-height: 1.55;
+  letter-spacing: -0.01em;
+}
+.s-point-label {
+  font-size: clamp(52px, 7vw, 64px);
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  margin-bottom: 8px;
+}
+.s-card-title {
+  font-size: clamp(35px, 13cqw, 40px);
+  font-weight: 700;
+  line-height: 1.35;
   letter-spacing: -0.01em;
 }
     `;
@@ -257,6 +278,20 @@ h1, h2, h3, .s-headline {
   font-weight: 700;
   color: var(--text);
   line-height: 1.35;
+}
+.s-point-label {
+  font-size: clamp(48px, 6vw, 60px);
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  margin-bottom: 8px;
+}
+.s-card-title {
+  font-size: clamp(35px, 12cqw, 38px);
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
 }
     `;
   }
@@ -365,6 +400,7 @@ section p.small, section p.desc, section p.label, section p.s-small {
 
 /* General Content Card */
 .s-card {
+  container-type: inline-size;
   background: color-mix(in srgb, var(--text) 3%, var(--bg));
   border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
   border-radius: 20px;
@@ -443,11 +479,12 @@ section p.small, section p.desc, section p.label, section p.s-small {
   border-radius: 2px;
 }
 .i-divider {
-  width: 2px;
-  height: 32px;
+  width: 32px;
+  height: 2px;
   background-color: var(--accent);
-  opacity: 0.5;
-  margin: 8px auto;
+  opacity: 0.35;
+  border-radius: 2px;
+  margin: 8px 0;
 }
 .anim-fade {
   animation: fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -472,13 +509,17 @@ IMAGE SLOTS: [IMAGE:placeholder_N|desc] → <img class="slot" data-slot="placeho
 BOLD: **text** → <strong>text</strong>
 SECTION STRUCTURE: <section id="section-N"> (one per topic/image/feature-point)
 "I" DIVIDER: A line that is exactly the single character "I" (nothing else) is a rhythm-pause marker, NOT the letter I. Render it as <div class="i-divider"></div> — never output it as visible text.
+POINT LABEL (STRICT): A CONTENT line starting with "Point N. " is a body-section subheading. Split it: render "POINT N" as <div class="s-point-label">POINT N</div> alone, then render the rest of that line (after "Point N. ") as a plain <p> right after, with NO class and NO font-size/style override of any kind. Every Point subheading must render at the exact same size regardless of text length — this <p> is EXEMPT from the "shrink long lines to fit one row" rule below; if it's long, let it wrap onto two lines instead of shrinking the font. DEFENSIVE CASE: if the copywriter's "Point N. " line was mistakenly broken across more than one CONTENT line (the very next CONTENT line, with no blank line before it, is clearly a continuation of the same subheading phrase, not a new independent sentence), treat that next line as part of the SAME Point subheading too — keep it inside the same plain <p> (joined with <br> if needed), still with no class/style override, NOT as a separate narrative-copy paragraph.
 
 LAYOUT (STRICT): NEVER place an image side-by-side with text in a horizontal split (image on one side, text column on the other). Always stack: image above or below the text, full width. This applies to every section, no exceptions.
 
-LINE BREAKS (STRICT): The copywriter pre-broke CONTENT into lines for exact reading rhythm.
-- Preserve every line break in CONTENT literally: render each CONTENT line as its own line (e.g. separate <br>-divided segment or its own element) inside the block.
-- NEVER merge two separate CONTENT lines into one flowing sentence/line.
-- NEVER let CSS word-wrap split a single CONTENT line across two visual rows. If a line is long, shrink that line's font-size (clamp() or a smaller class) so it fits on one row — do not shrink below a readable minimum (e.g. never under 20px for narrative copy), and do not allow an extra wrap to appear.
+LINE BREAKS (STRICT): The copywriter pre-broke CONTENT into lines for exact reading rhythm. Grouping is based PURELY on blank lines — never on grammar or how many lines are involved:
+- Lines with NO blank line between them (no matter how many, no matter whether each one reads as a complete sentence) all belong to the SAME group — render them together inside ONE <p>, separated only by <br>, with NO extra spacing between them.
+- A blank line in CONTENT marks a NEW group — start a fresh <p> for the lines that follow, as its own direct child of the section (this naturally gets the section's own larger spacing from its gap).
+- NEVER render individual lines from the same blank-line-delimited group as separate <p> siblings — that creates a huge unwanted gap that shouldn't be there.
+- NEVER merge two separate CONTENT lines into one flowing sentence/line — keep each line's own <br> break.
+- NEVER let CSS word-wrap split a single CONTENT line across two visual rows. If a line is long, shrink that line's font-size (clamp() or a smaller class) so it fits on one row — do not shrink below a readable minimum (e.g. never under 35px for narrative copy), and do not allow an extra wrap to appear.
+- INSIDE .s-card: this "shrink font-size" fix must NEVER be done with an inline style="" or a hand-picked px number — a .s-card is much narrower than the viewport (especially in a multi-column .s-grid), so a viewport-scaled or guessed size will overflow and wrap word-by-word. Use the pre-tuned <p class="s-card-title"> class instead (see class vocabulary) for any bold headline/emphasis line inside a card.
 
 ${getFontSizeGuide(tone.id)}
 
@@ -581,8 +622,9 @@ OUTPUT RULES:
 - No inline style="" attributes
 - STRICT CONTENT RULE: Use ONLY text from CONTENT below. Do NOT invent branding, badges, slogans, collaboration names, or any copy not explicitly in CONTENT.
 - "I" DIVIDER: A line that is exactly the single character "I" (nothing else) is a rhythm-pause marker, NOT the letter I. Render it as <div class="i-divider"></div> — never output it as visible text.
+- POINT LABEL (STRICT): A CONTENT line starting with "Point N. " is a body-section subheading. Split it: render "POINT N" as <div class="s-point-label">POINT N</div> alone, then render the rest of that line (after "Point N. ") as a plain <p> right after, with NO class and NO font-size/style override of any kind. Every Point subheading must render at the exact same size regardless of text length — this <p> is EXEMPT from the "shrink long lines to fit one row" rule below; if it's long, let it wrap onto two lines instead of shrinking the font. DEFENSIVE CASE: if the copywriter's "Point N. " line was mistakenly broken across more than one CONTENT line (the very next CONTENT line, with no blank line before it, is clearly a continuation of the same subheading phrase, not a new independent sentence), treat that next line as part of the SAME Point subheading too — keep it inside the same plain <p> (joined with <br> if needed), still with no class/style override, NOT as a separate narrative-copy paragraph.
 - LAYOUT (STRICT): NEVER place an image side-by-side with text in a horizontal split (image on one side, text column on the other). Always stack: image above or below the text, full width. This applies to every section, no exceptions.
-- LINE BREAKS (STRICT): Preserve every line break in CONTENT literally (one CONTENT line = one rendered line, e.g. via <br>). Never merge two CONTENT lines into one sentence, and never let CSS word-wrap split a single CONTENT line across two rows — shrink font-size instead, but never below a readable minimum (e.g. never under 20px for narrative copy).
+- LINE BREAKS (STRICT): Grouping is based PURELY on blank lines, never on grammar. Lines with no blank line between them (however many, regardless of whether each reads as a complete sentence) all belong to the SAME group — render together in ONE <p>, separated only by <br>, no extra spacing. A blank line marks a NEW group — start a fresh <p> as its own direct child of the section (gets the section's larger spacing naturally). Never render lines from the same blank-line-delimited group as separate <p> siblings. Never merge two lines into one flowing sentence, and never let CSS word-wrap split a single line across two rows — shrink font-size instead, but never below a readable minimum (e.g. never under 35px for narrative copy). Inside a .s-card, never fix this with inline style="" or a hand-picked px number — use <p class="s-card-title"> instead, which is already pre-tuned to the card's own (narrow) width.
 - To write secondary small text (fine print, label, disclaimer), wrap it in <p class="small"> or <p class="desc"> (16px).
 
 ${getFontSizeGuide(tone.id)}
@@ -660,8 +702,9 @@ export async function generateHtmlDesign(
 
   if (slotChunks.length === 1) {
     // 단일 패스
-    const sectionIds = extractSectionIds(firstHtml);
-    return { fullHtml: firstHtml, sectionIds, generatedAt: Date.now() };
+    const verifiedHtml = await verifyAndFixCardLayouts(firstHtml, toneId);
+    const sectionIds = extractSectionIds(verifiedHtml);
+    return { fullHtml: verifiedHtml, sectionIds, generatedAt: Date.now() };
   }
 
   // ── 후속 패스: 섹션 조각 생성 후 병합 ──
@@ -685,8 +728,108 @@ export async function generateHtmlDesign(
     }
   }
 
-  const sectionIds = extractSectionIds(fullHtml);
-  return { fullHtml, sectionIds, generatedAt: Date.now() };
+  const verifiedHtml = await verifyAndFixCardLayouts(fullHtml, toneId);
+  const sectionIds = extractSectionIds(verifiedHtml);
+  return { fullHtml: verifiedHtml, sectionIds, generatedAt: Date.now() };
+}
+
+// ─── 카드 레이아웃 검증·자동 보정 ─────────────────────────────────────────────
+// 카드(.s-card) 안 헤드라인(.s-card-title)이 콘티의 원래 줄 구성(<br> 기준)보다
+// 더 많은 줄로 쪼개져 렌더링되는지 실제 헤드리스 브라우저로 렌더링해 확인하고,
+// 문제가 있으면 그 섹션만 AI에게 다시 그리게 한다. 최대 2회 시도 후 종료.
+async function verifyAndFixCardLayouts(fullHtml: string, toneId: string): Promise<string> {
+  const { chromium } = await import("playwright");
+  let browser;
+  try {
+    browser = await chromium.launch();
+  } catch (err) {
+    console.error("[verify-card-layout] 헤드리스 브라우저 실행 실패, 검증 건너뜀:", err);
+    return fullHtml;
+  }
+
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await page.setContent(fullHtml, { waitUntil: "domcontentloaded" });
+    // 실제 웹폰트가 다 로드된 뒤에 측정해야 줄바꿈 판정이 매번 같게 나온다.
+    await page.evaluate(() => (document as Document).fonts.ready).catch(() => {});
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const brokenSectionIds: string[] = await page.evaluate(() => {
+        const ids = new Set<string>();
+        document.querySelectorAll("p.s-card-title").forEach((p) => {
+          const intendedLines = p.innerHTML.split(/<br\s*\/?>/i).length;
+          const range = document.createRange();
+          range.selectNodeContents(p);
+          const actualLines = Array.from(range.getClientRects()).filter((r) => r.width > 0).length;
+          const overflowing = p.scrollWidth > p.clientWidth + 1;
+          if (actualLines > intendedLines || overflowing) {
+            const section = p.closest("section[id]");
+            if (section) ids.add(section.id);
+          }
+        });
+        return Array.from(ids);
+      });
+
+      if (brokenSectionIds.length === 0) break;
+
+      for (const sectionId of brokenSectionIds) {
+        const sectionHtml: string | null = await page.evaluate((id) => {
+          const el = document.getElementById(id);
+          return el ? el.outerHTML : null;
+        }, sectionId);
+        if (!sectionHtml) continue;
+
+        console.log(`[verify-card-layout] ${sectionId} 카드 줄바꿈/넘침 불일치 감지, 재생성 시도 ${attempt + 1}`);
+        const instruction =
+          "이 섹션 안 카드형 레이아웃에서 카드 폭이 좁아 헤드라인 텍스트가 원래 줄 구성(현재 <br>로 표시된 줄 수)보다 더 많은 줄로 갈라지거나, 카드 밖으로 옆으로 넘쳐서 렌더링되고 있다. 콘티의 원래 줄바꿈이 그대로 유지되도록 카드 배치나 디자인 방식을 판단해서 이 섹션을 다시 만들어라 (카드 열 수를 줄이거나 세로로 쌓는 등 방법은 자유롭게 선택하되): 1) 각 카드 헤드라인의 줄 구성이 지금보다 더 많은 줄로 갈라지면 안 된다, 2) 글자 크기는 35px 밑으로 내려가면 안 된다, 3) white-space:nowrap이나 overflow:hidden 등으로 줄 수만 맞추고 실제로는 텍스트가 카드 박스 밖으로 넘치거나 잘리게 하는 편법은 절대 쓰지 마라 — 텍스트 전체가 카드 안에 실제로 온전히 보여야 한다, 4) 카드 열 수는 화면 폭에 따라 자동으로 반응하도록(예: repeat(auto-fit, minmax(...))) 유지하고, 화면 폭과 무관하게 항상 1열로 고정되는 값(grid-template-columns:1fr 같은)은 쓰지 마라, 5) 이미지 슬롯과 텍스트 내용은 그대로 유지하라.";
+
+        try {
+          const fixedSectionHtml = await editSectionHtml(sectionHtml, instruction, toneId);
+          await page.evaluate(
+            ({ id, html }) => {
+              const el = document.getElementById(id);
+              if (el) el.outerHTML = html;
+            },
+            { id: sectionId, html: fixedSectionHtml }
+          );
+        } catch (err) {
+          console.error(`[verify-card-layout] ${sectionId} 자동 보정 실패:`, err);
+        }
+      }
+    }
+
+    // 최종 안전장치: AI 재시도로도 안 고쳐졌으면 코드가 직접 강제 교정한다.
+    // (인라인 스타일을 전부 제거해 톤별로 미리 튜닝된 .s-card-title/.s-grid/.s-card
+    //  기본(반응형) 스타일로 되돌린다 — 화면 폭에 따라 열 수가 자동으로 반응하는
+    //  원래 동작은 유지하면서, 최소 글자 크기·넘침 없음만 보장한다. 화면 폭과
+    //  무관하게 특정 열 수로 고정하지 않는다.)
+    const forcedFixes: string[] = await page.evaluate(() => {
+      const fixed: string[] = [];
+      document.querySelectorAll("p.s-card-title").forEach((p) => {
+        const intendedLines = p.innerHTML.split(/<br\s*\/?>/i).length;
+        const range = document.createRange();
+        range.selectNodeContents(p);
+        const actualLines = Array.from(range.getClientRects()).filter((r) => r.width > 0).length;
+        const overflowing = p.scrollWidth > p.clientWidth + 1;
+        if (actualLines <= intendedLines && !overflowing) return;
+
+        fixed.push(p.textContent?.slice(0, 20) ?? "");
+        p.removeAttribute("style");
+        const grid = p.closest(".s-grid") as HTMLElement | null;
+        if (grid) grid.removeAttribute("style");
+        const card = p.closest(".s-card") as HTMLElement | null;
+        if (card) card.removeAttribute("style");
+      });
+      return fixed;
+    });
+    if (forcedFixes.length > 0) {
+      console.log(`[verify-card-layout] 코드 강제 교정 적용 (${forcedFixes.length}건): ${forcedFixes.join(", ")}`);
+    }
+
+    return await page.content();
+  } finally {
+    await browser.close();
+  }
 }
 
 function extractSectionIds(html: string): string[] {
@@ -733,4 +876,40 @@ Return ONLY the updated <section>...</section>. No explanation. No markdown fenc
 
   const raw = response.content[0].type === "text" ? response.content[0].text : "";
   return raw.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "").trim();
+}
+
+// ─── 카피 문단 수정 ──────────────────────────────────────────────────────────
+
+export async function editCopyHtml(
+  copyHtml: string,
+  instruction: string,
+  toneId: string
+): Promise<string> {
+  const tone = getToneById(toneId);
+  const accentColor = tone?.accentColor ?? "#000000";
+
+  const systemText = `You are editing one paragraph of copy text within a Korean product detail page.
+
+Apply the instruction. Preserve the <p> tag itself, its class and attributes, unless asked to change them.
+BOLD: **text** → <strong style="color:${accentColor}">text</strong>
+No new style="" attributes. No new <style> blocks.`;
+
+  const userText = `CURRENT PARAGRAPH:
+${copyHtml}
+
+INSTRUCTION: "${instruction}"
+
+Return ONLY the updated <p>...</p>. No explanation. No markdown fences.`;
+
+  const copyResponse = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 1024,
+    system: [
+      { type: "text", text: systemText, cache_control: { type: "ephemeral" } },
+    ],
+    messages: [{ role: "user", content: userText }],
+  });
+
+  const copyRaw = copyResponse.content[0].type === "text" ? copyResponse.content[0].text : "";
+  return copyRaw.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "").trim();
 }

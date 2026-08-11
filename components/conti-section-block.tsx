@@ -2,21 +2,18 @@ import { SectionChangeInfo } from "@/lib/format-output";
 
 export function ContiSectionBlock({
   title,
-  intent,
   content,
   onCopy,
   revising = false,
   changeInfo,
 }: {
   title: string;
-  intent: string;
   content: string;
   onCopy: (text: string) => void;
   revising?: boolean;
   changeInfo?: SectionChangeInfo;
 }) {
   const isChanged = !revising && !!changeInfo;
-  const intentChanged = isChanged && !!changeInfo?.intent;
   const contentChanged = isChanged && !!changeInfo?.content;
 
   return (
@@ -50,43 +47,12 @@ export function ContiSectionBlock({
           )}
         </div>
         <button
-          onClick={() => onCopy(intent + "\n\n" + content)}
+          onClick={() => onCopy(content)}
           className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded-lg px-3 py-1 transition-colors"
         >
           복사
         </button>
       </div>
-
-      {/* 기획 의도 */}
-      {intent && (
-        <div
-          className="px-6 py-4 border-b transition-colors duration-500"
-          style={
-            intentChanged
-              ? {
-                  backgroundColor: "#ecfdf5",
-                  borderBottomColor: "#a7f3d0",
-                  borderLeft: "4px solid #34d399",
-                }
-              : { backgroundColor: "#eff6ff", borderBottomColor: "#bfdbfe" }
-          }
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-bold tracking-wider" style={{ color: "#2563eb" }}>
-              기획 의도
-            </span>
-            {intentChanged && (
-              <span
-                className="text-xs font-semibold px-1.5 py-0.5 rounded"
-                style={{ backgroundColor: "#d1fae5", color: "#065f46" }}
-              >
-                변경됨
-              </span>
-            )}
-          </div>
-          <p className="text-sm text-blue-800 whitespace-pre-line leading-relaxed">{intent}</p>
-        </div>
-      )}
 
       {/* 콘티 본문 */}
       <div
