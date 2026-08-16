@@ -711,6 +711,7 @@ section p.small, section p.desc, section p.label, section p.s-small {
 /* General Content Card */
 .s-card {
   container-type: inline-size;
+  width: 100%;
   background: color-mix(in srgb, var(--text) 3%, var(--bg));
   border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
   border-radius: 20px;

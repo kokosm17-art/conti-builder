@@ -24,7 +24,11 @@ interface SectionMeta {
 
 // ─── DOM 유틸 ─────────────────────────────────────────────────────────────────
 
-// 슬롯별 이미지를 Firestore 문서(1MiB 제한)에 안전하게 담기 위해 리사이즈+압축 후 base64로 변환
+// Firestore 문서 필드 값의 최대 크기(1,048,487바이트)보다 여유를 두고 안전선을 잡는다.
+const FIRESTORE_FIELD_SAFE_BYTES = 950_000;
+
+// 슬롯별 이미지를 Firestore 문서(1MiB 제한)에 안전하게 담기 위해 리사이즈+압축 후 base64로 변환.
+// 한 번의 압축으로 안전선을 못 넘기면(고해상도/고디테일 사진 등) 폭과 화질을 단계적으로 더 줄여 재시도한다.
 function compressImage(file: File, maxWidth = 1400, quality = 0.8): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -33,14 +37,36 @@ function compressImage(file: File, maxWidth = 1400, quality = 0.8): Promise<stri
       const img = new Image();
       img.onerror = () => reject(new Error("이미지를 읽을 수 없습니다."));
       img.onload = () => {
-        const scale = Math.min(1, maxWidth / img.width);
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.max(1, Math.round(img.width * scale));
-        canvas.height = Math.max(1, Math.round(img.height * scale));
-        const ctx = canvas.getContext("2d");
-        if (!ctx) { reject(new Error("이미지를 처리할 수 없습니다.")); return; }
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/jpeg", quality));
+        const render = (width: number, q: number): string => {
+          const scale = Math.min(1, width / img.width);
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(img.width * scale));
+          canvas.height = Math.max(1, Math.round(img.height * scale));
+          const ctx = canvas.getContext("2d");
+          if (!ctx) throw new Error("이미지를 처리할 수 없습니다.");
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          return canvas.toDataURL("image/jpeg", q);
+        };
+        try {
+          let width = maxWidth;
+          let q = quality;
+          let dataUrl = render(width, q);
+          for (let attempt = 0; attempt < 6 && dataUrl.length > FIRESTORE_FIELD_SAFE_BYTES; attempt++) {
+            if (q > 0.4) {
+              q -= 0.15;
+            } else {
+              width = Math.round(width * 0.75);
+            }
+            dataUrl = render(width, q);
+          }
+          if (dataUrl.length > FIRESTORE_FIELD_SAFE_BYTES) {
+            reject(new Error("사진 용량이 너무 커서 줄일 수 없습니다. 더 작은 사진으로 시도해 주세요."));
+            return;
+          }
+          resolve(dataUrl);
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error("이미지를 처리할 수 없습니다."));
+        }
       };
       img.src = reader.result as string;
     };
@@ -120,8 +146,12 @@ function buildInteractiveHtml(html: string): string {
   const style = domDoc.createElement("style");
   style.id = "ci-overlay-styles";
   style.textContent = `
+    /* .s-card는 container-type:inline-size라서, align-items:center인 부모(.s-cta 등) 안에 혼자 있으면
+       내용을 무시하고 폭 0에 가깝게 찌그러져 글자가 세로로 한 글자씩 쌓인다 — 기존에 저장된 디자인에도
+       소급 적용되도록 여기서 강제로 폭을 채운다(신규 생성분은 lib/html-design-ai.ts에서 이미 고쳐짐). */
+    .s-card{width:100%!important;}
     .ci-wrap{display:block!important;cursor:pointer;overflow:hidden;}
-    .ci-wrap.ci-ratio{position:relative!important;aspect-ratio:4/3!important;width:auto!important;height:auto!important;}
+    .ci-wrap.ci-ratio{position:relative!important;aspect-ratio:4/3!important;width:100%!important;height:auto!important;align-self:stretch!important;}
     .ci-wrap.ci-hero{position:absolute!important;inset:0!important;width:auto!important;height:auto!important;}
     .ci-ph{
       position:absolute!important;inset:0!important;
@@ -388,12 +418,18 @@ export default function PreviewHtmlPage() {
 
       if (e.data.type === "SLOT_CLICK") {
         const slotId = e.data.slotId as string;
-        // 해당 슬롯이 속한 섹션 찾기 (없으면 임시 메타 생성)
-        const meta = sectionMetas.find((m) => m.slotId === slotId) ?? {
-          id: "",
-          label: "이미지 영역",
-          slotId,
-        };
+        // sectionMetas는 섹션당 이미지 슬롯 하나만 기억하므로, 한 섹션에 이미지가
+        // 여러 개(예: Why 와디즈 등)일 때 첫 번째가 아닌 슬롯은 못 찾는다.
+        // fullHtml에서 슬롯이 실제로 속한 섹션을 직접 찾아 그 섹션의 id를 사용해야
+        // "수정" 버튼(섹션 단위 AI 수정)이 정상적으로 나타난다.
+        let meta = sectionMetas.find((m) => m.slotId === slotId);
+        if (!meta) {
+          const domDoc = new DOMParser().parseFromString(fullHtml, "text/html");
+          const sec = domDoc.querySelector(`img[data-slot="${slotId}"]`)?.closest("section[id]");
+          const secId = sec?.id ?? "";
+          const found = secId ? sectionMetas.find((m) => m.id === secId) : undefined;
+          meta = { id: secId, label: found?.label ?? "이미지 영역", slotId };
+        }
         setEditingMeta(meta);
         setEditInstruction("");
       }
