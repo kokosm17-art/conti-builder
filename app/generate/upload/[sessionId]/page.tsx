@@ -227,7 +227,7 @@ export default function UploadPage() {
             <ArrowLeft className="w-4 h-4" /> 톤 선택으로
           </Link>
           <span className="text-xs bg-blue-100 text-blue-800 font-bold px-3 py-1.5 rounded-full">
-            디자인 자동화 ✦ 2단계
+            디자인 생성 ✦ 2단계
           </span>
         </div>
       </header>

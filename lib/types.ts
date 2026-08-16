@@ -135,6 +135,7 @@ export interface SessionDoc {
   selectedTone?: string;       // 선택된 디자인 톤 ID
   fontChoice?: string;         // 선택된 폰트명 ("recommended" = 톤 추천 폰트)
   colorChoice?: string;        // 선택된 포인트 컬러 프리셋 ID ("recommended" = 톤 추천 색상)
+  alignChoice?: string;        // 텍스트 정렬 ("recommended" | "left" | "center", recommended = left)
   shareId?: string;            // 공유 링크용 고유 ID
   assets?: {                   // 업로드 이미지 에셋 매핑 { placeholderId: imageUrl }
     [placeholderId: string]: string;
@@ -163,6 +164,7 @@ export interface SessionState {
   selectedTone?: string;
   fontChoice?: string;
   colorChoice?: string;
+  alignChoice?: string;
   shareId?: string;
   assets?: {
     [placeholderId: string]: string;

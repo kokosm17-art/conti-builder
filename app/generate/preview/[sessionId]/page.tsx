@@ -147,7 +147,7 @@ export default function PreviewPage() {
   }
 
   async function handleFullRegen() {
-    if (designGenCount >= 5) {
+    if (designGenCount >= 9999) { // TEMP: 로컬 테스트용 한도 해제, 테스트 후 5로 복원할 것
       alert("재생성 횟수(최대 5회)를 모두 사용하셨습니다.");
       return;
     }

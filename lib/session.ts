@@ -65,6 +65,7 @@ export async function getActiveSession(userId: string) {
     selectedTone: data.selectedTone as string | undefined,
     fontChoice: data.fontChoice as string | undefined,
     colorChoice: data.colorChoice as string | undefined,
+    alignChoice: data.alignChoice as string | undefined,
     shareId: data.shareId as string | undefined,
     assets: data.assets as Record<string, string> | undefined,
     designResult: data.designResult as import("./types").DesignResult | undefined,
@@ -108,6 +109,7 @@ export async function getSessionById(sessionId: string, userId: string) {
     selectedTone: data.selectedTone as string | undefined,
     fontChoice: data.fontChoice as string | undefined,
     colorChoice: data.colorChoice as string | undefined,
+    alignChoice: data.alignChoice as string | undefined,
     shareId: data.shareId as string | undefined,
     assets: data.assets as Record<string, string> | undefined,
     designResult: data.designResult as import("./types").DesignResult | undefined,
@@ -139,6 +141,7 @@ export async function createSession(userId: string, productName: string) {
     selectedTone: "",
     fontChoice: "recommended",
     colorChoice: "recommended",
+    alignChoice: "recommended",
     shareId: "",
     assets: {},
     designResult: null,
@@ -321,6 +324,12 @@ export async function updateColorChoice(sessionId: string, colorChoice: string) 
   await updateDoc(ref, { colorChoice });
 }
 
+/** 텍스트 정렬 선택 저장 */
+export async function updateAlignChoice(sessionId: string, alignChoice: string) {
+  const ref = doc(db, "sessions", sessionId);
+  await updateDoc(ref, { alignChoice });
+}
+
 /** shareId 발급 및 저장 (없을 때만 신규 발급) */
 export async function ensureShareId(sessionId: string): Promise<string> {
   const ref = doc(db, "sessions", sessionId);
@@ -372,6 +381,15 @@ export async function saveHtmlDesignEdit(
   await updateDoc(ref, {
     "htmlDesign.fullHtml": fullHtml,
     designEditCount: designEditCount + 1,
+  });
+}
+
+/** 정렬 전환 등 AI 호출 없는 즉시 반영 수정 — 수정 횟수를 소모하지 않는다 */
+export async function saveHtmlDesignQuickEdit(sessionId: string, fullHtml: string, alignChoice?: string) {
+  const ref = doc(db, "sessions", sessionId);
+  await updateDoc(ref, {
+    "htmlDesign.fullHtml": fullHtml,
+    ...(alignChoice ? { alignChoice } : {}),
   });
 }
 

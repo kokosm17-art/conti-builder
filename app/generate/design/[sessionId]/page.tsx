@@ -68,6 +68,7 @@ export default function DesignGeneratePage() {
             selectedTone: session.selectedTone ?? "minimal",
             fontChoice: session.fontChoice ?? "recommended",
             colorChoice: session.colorChoice ?? "recommended",
+            alignChoice: session.alignChoice ?? "recommended",
           }),
         });
 

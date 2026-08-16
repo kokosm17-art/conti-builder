@@ -3,7 +3,7 @@ import { generateHtmlDesign } from "@/lib/html-design-ai";
 
 export async function POST(req: NextRequest) {
   try {
-    const { contiText, selectedTone, fontChoice, colorChoice } = await req.json();
+    const { contiText, selectedTone, fontChoice, colorChoice, alignChoice } = await req.json();
 
     if (!contiText) {
       return NextResponse.json({ error: "콘티 데이터 없음" }, { status: 400 });
@@ -13,7 +13,8 @@ export async function POST(req: NextRequest) {
       contiText,
       selectedTone ?? "minimal",
       fontChoice ?? "recommended",
-      colorChoice ?? "recommended"
+      colorChoice ?? "recommended",
+      alignChoice ?? "recommended"
     );
 
     return NextResponse.json({ success: true, htmlDesign });

@@ -341,7 +341,7 @@ export default function DownloadPage() {
             <ArrowLeft className="w-4 h-4" /> 미리보기로
           </Link>
           <span className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full">
-            디자인 자동화 ✦ 다운로드
+            디자인 생성 ✦ 다운로드
           </span>
         </div>
       </header>

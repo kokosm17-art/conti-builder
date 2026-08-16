@@ -165,9 +165,16 @@ SHARED CSS CLASS VOCABULARY (use these names consistently — second-pass sectio
 .s-card-title  headline/emphasis text inside .s-card (e.g. a USP card in .s-grid) — fixed size already defined in <style>, pre-tuned to the card's OWN width (not the viewport), with a 35px floor built in. Any <p> that is a bold headline/emphasis line inside a .s-card MUST use <p class="s-card-title"> and MUST NOT have any inline style="" or a flat px font-size — cards are much narrower than the full screen, so a viewport-sized or hand-picked px value will overflow and wrap word-by-word. Regular (non-headline) body text inside a .s-card still uses the normal unclassed <p>.
 .s-dark        section-level dark override (add class="s-dark" to a <section>, no other change needed) — flips that section to a black background with white text; --accent stays the same color and remains legible on it. Only used on tones designed for it (see tone-specific rules above).
 .s-highlight   inline highlighter-marker emphasis for a short phrase WITHIN a line — wrap only the key word(s) in <span class="s-highlight">text</span>, never a whole paragraph or a standalone block. Do not use it as a section or div wrapper.
+
+CLOSING BOILERPLATE SECTIONS (spec table / FAQ / maker intro): the conclusion of a conti usually contains these recognizable content blocks. Detect them by meaning, not exact wording, and ALWAYS use the matching structure below instead of generic <p> tags — these are NOT narrative copy and must never use .s-card-title or the big narrative font size.
+.s-spec        product spec table — use when CONTENT has a heading about product specs/sizing/certification info (e.g. "스펙", "사양", "제품 정보"). Structure: <div class="s-spec"> wrapping one <div class="s-spec-row"><span class="s-spec-label">라벨</span><span class="s-spec-value">값</span></div> per line. Put the whole thing inside a .s-card with a .s-card-title heading above it.
+.s-faq-item    one FAQ question+answer pair — use when CONTENT has a heading about frequently asked questions (e.g. "FAQ", "자주 묻는 질문"). For each Q/A pair: <div class="s-faq-item"><p class="s-faq-q">질문</p><p class="s-faq-a">답변</p></div>. Put all pairs inside one .s-card with a .s-card-title heading ("FAQ") above them — do NOT give the question or answer any other class/size override.
+.s-maker-photo / .s-maker-title / .s-maker-text / .s-why / .s-why-title / .s-why-text   메이커 소개 + Why 와디즈 — use when CONTENT introduces the maker/brand and/or explains why the campaign is on Wadiz (headings like "메이커 소개", "왜 와디즈인가요", "Why 와디즈"). Treat these as ONE combined section: photo <img class="s-maker-photo slot" data-slot="..." ...>, maker heading <p class="s-maker-title">, intro copy as plain <p> (or <p class="s-maker-text"> if the tone defines it), then the Why-와디즈 portion wrapped in <div class="s-why"><p class="s-why-title">Why 와디즈</p><p class="s-why-text">...</p></div> nested inside the same section.
+⚠ FIXED SIZE, EXEMPT FROM "SHRINK LONG LINES" RULE: .s-spec-label/.s-spec-value/.s-faq-q/.s-faq-a/.s-maker-title/.s-maker-text/.s-why-title/.s-why-text already have a fixed, pre-tuned font-size in <style> — exactly like .s-point-label/.s-card-title. They are NOT narrative copy, so the LINE BREAKS rule's "shrink font-size so a long line fits one row, floor 35px" does NOT apply to them: never add inline style="", never add a custom CSS rule (clamp() or otherwise, including a section-id-scoped selector like "#section-N .s-faq-a") that changes their font-size, and never combine them with .s-card-title. If a value/answer/text line is long, simply let it wrap onto multiple lines at its already-defined (smaller) size — do not shrink it and do not force it onto one row.
 `.trim();
 
-function getPredefinedCss(tone: ToneConfig, fontFamily: string): string {
+function getPredefinedCss(tone: ToneConfig, fontFamily: string, align: string = "left"): string {
+  const resolvedAlign = align === "center" ? "center" : "left";
   let typographyCss = "";
   if (tone.id === "emotional") {
     typographyCss = `
@@ -190,6 +197,61 @@ section p {
   font-weight: 800;
   line-height: 1.3;
   letter-spacing: -0.02em;
+}
+.s-spec-banner {
+  background: var(--accent);
+  color: #fff;
+  padding: 12px 20px;
+  font-weight: 800;
+  font-size: 16px;
+  border-radius: 8px 8px 0 0;
+  display: inline-block;
+}
+.s-spec {
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.s-spec-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  font-size: 16px;
+}
+.s-spec-row:last-child { border-bottom: none; }
+.s-spec-label { opacity: 0.55; font-weight: 500; font-size: 15px; }
+.s-spec-value { font-weight: 700; font-size: 16px; }
+.s-maker-photo {
+  width: 100%;
+  aspect-ratio: 16/10;
+  object-fit: cover;
+  border-radius: 12px;
+}
+.s-maker-title {
+  background: var(--accent);
+  color: #fff;
+  display: inline-block;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 15px;
+}
+.s-why {
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+  border-radius: 12px;
+  padding: 24px;
+  margin-top: 8px;
+}
+.s-why-title {
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.s-why-text {
+  font-size: 16px;
+  line-height: 1.6;
 }
     `;
   } else if (tone.id === "cinematic") {
@@ -220,6 +282,49 @@ strong {
   line-height: 1.3;
   letter-spacing: -0.02em;
 }
+.s-spec {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+.s-spec-row {
+  background: color-mix(in srgb, var(--text) 6%, var(--bg));
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.s-spec-label { font-size: 13px; opacity: 0.5; }
+.s-spec-value { font-size: 17px; font-weight: 700; }
+.s-maker-photo {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin: 0 auto;
+  display: block;
+}
+.s-maker-title {
+  font-size: 20px;
+  font-weight: 800;
+  text-align: center;
+}
+.s-why {
+  border-left: 3px solid var(--accent);
+  padding-left: 16px;
+  margin-top: 8px;
+}
+.s-why-title {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.s-why-text {
+  font-size: 16px;
+  line-height: 1.6;
+}
     `;
   } else if (tone.id === "impact") {
     typographyCss = `
@@ -243,6 +348,40 @@ section p {
   line-height: 1.3;
   letter-spacing: -0.02em;
 }
+.s-spec-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 4px;
+  border-bottom: 2px solid var(--accent);
+}
+.s-spec-label { font-size: 15px; font-weight: 600; opacity: 0.7; }
+.s-spec-value { font-size: 19px; font-weight: 900; color: var(--accent); }
+.s-maker-photo {
+  width: 100%;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+  border-radius: 12px;
+}
+.s-maker-title {
+  font-size: 22px;
+  font-weight: 900;
+}
+.s-why {
+  border-left: 4px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg));
+  padding: 16px 20px;
+  margin-top: 8px;
+}
+.s-why-title {
+  font-weight: 900;
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+.s-why-text {
+  font-size: 16px;
+  line-height: 1.6;
+}
     `;
   } else if (tone.id === "premium") {
     typographyCss = `
@@ -265,6 +404,50 @@ section p {
   font-weight: 700;
   line-height: 1.35;
   letter-spacing: -0.01em;
+}
+.s-spec {
+  border-top: 2px solid var(--text);
+}
+.s-spec-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 15%, transparent);
+}
+.s-spec-label {
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 12px;
+  opacity: 0.55;
+}
+.s-spec-value { font-weight: 600; font-size: 15px; }
+.s-maker-photo {
+  width: 100%;
+  aspect-ratio: 1/1;
+  object-fit: cover;
+  filter: grayscale(15%);
+}
+.s-maker-title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.s-why {
+  border-top: 1px solid color-mix(in srgb, var(--text) 15%, transparent);
+  padding-top: 20px;
+  margin-top: 12px;
+}
+.s-why-title {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+  margin-bottom: 8px;
+}
+.s-why-text {
+  font-size: 16px;
+  line-height: 1.6;
 }
     `;
   } else if (tone.id === "stimulus") {
@@ -296,6 +479,58 @@ strong {
   background-color: #0A0A0A;
   color: #FFFFFF;
 }
+.s-spec-banner {
+  background: var(--accent);
+  color: #fff;
+  padding: 14px 20px;
+  font-weight: 900;
+  font-size: 16px;
+  display: inline-block;
+}
+.s-spec-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+  font-weight: 700;
+}
+.s-spec-label { opacity: 0.6; font-weight: 600; font-size: 15px; }
+.s-spec-value { font-weight: 800; font-size: 16px; }
+.s-maker-photo {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  object-fit: cover;
+  filter: grayscale(100%);
+  margin: 0 auto;
+  display: block;
+}
+.s-maker-title {
+  text-align: center;
+  font-weight: 900;
+  font-size: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+.s-why {
+  background: #0A0A0A;
+  color: #FFFFFF;
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 8px;
+}
+.s-why-title {
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.s-why-text {
+  font-size: 15px;
+  line-height: 1.6;
+  opacity: 0.9;
+}
     `;
   } else { // minimal
     typographyCss = `
@@ -325,10 +560,51 @@ h1, h2, h3, .s-headline {
   line-height: 1.35;
   letter-spacing: -0.01em;
 }
+.s-spec-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+  font-size: 15px;
+}
+.s-spec-label { opacity: 0.55; font-size: 14px; }
+.s-spec-value { font-weight: 600; font-size: 15px; }
+.s-maker-photo {
+  width: 100%;
+  aspect-ratio: 1/1;
+  object-fit: cover;
+  border-radius: 12px;
+}
+.s-maker-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+.s-why {
+  background: color-mix(in srgb, var(--text) 5%, var(--bg));
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 8px;
+}
+.s-why-title {
+  font-weight: 700;
+  font-size: 14px;
+  opacity: 0.7;
+  margin-bottom: 6px;
+}
+.s-why-text {
+  font-size: 15px;
+  line-height: 1.6;
+}
     `;
   }
 
   return `
+/* Text Alignment (user-selected, code-controlled — do not remove this rule or its --align/--align-margin declaration) */
+:root {
+  --align: ${resolvedAlign};
+  --align-margin: ${resolvedAlign === "center" ? "auto" : "0"};
+}
+
 /* Base Structure */
 section {
   position: relative;
@@ -339,6 +615,7 @@ section {
   overflow: hidden;
   word-break: keep-all;
   overflow-wrap: break-word;
+  text-align: var(--align);
 }
 section.s-alt {
   background-color: color-mix(in srgb, var(--accent) 4%, var(--bg));
@@ -518,11 +795,36 @@ section p.small, section p.desc, section p.label, section p.s-small {
   border-radius: 2px;
   margin: 8px 0;
 }
+.accent-bar, .i-divider {
+  margin-left: var(--align-margin);
+  margin-right: var(--align-margin);
+}
 .s-highlight {
   background: color-mix(in srgb, var(--accent) 35%, transparent);
   padding: 0 4px;
   border-radius: 3px;
 }
+
+/* FAQ (shared structure across all tones — colors still follow the active tone's vars) */
+.s-faq-item {
+  padding: 24px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+}
+.s-faq-item:last-child {
+  border-bottom: none;
+}
+.s-faq-q {
+  font-size: 22px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+.s-faq-a {
+  font-size: 16px;
+  font-weight: 400;
+  opacity: 0.6;
+  line-height: 1.6;
+}
+
 .anim-fade {
   animation: fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -580,9 +882,10 @@ async function generateFirstPass(
   textChunk: string,
   chunkSlotIds: string[],
   allSlotIds: string[],
-  startSectionN: number
+  startSectionN: number,
+  align: string = "left"
 ): Promise<string> {
-  const predefinedCss = getPredefinedCss(tone, fontFamily);
+  const predefinedCss = getPredefinedCss(tone, fontFamily, align);
   const systemText = `${buildToneHeader(tone, fontFamily)}
 
 Generate a COMPLETE HTML document for PART 1 of the product page.
@@ -712,7 +1015,8 @@ export async function generateHtmlDesign(
   contiText: string,
   toneId: string,
   fontChoice: string,
-  colorChoice?: string
+  colorChoice?: string,
+  alignChoice?: string
 ): Promise<HtmlDesignResult> {
   const baseTone = getToneById(toneId);
   if (!baseTone) throw new Error(`알 수 없는 톤: ${toneId}`);
@@ -739,10 +1043,11 @@ export async function generateHtmlDesign(
   console.log(`[html-design-ai][DEBUG] processedText head:\n${processedText.slice(0, 400)}`);
 
   // ── 1차 패스: 완전한 HTML 문서 ──
+  const resolvedAlign = alignChoice === "center" ? "center" : "left";
   const firstHtml = await generateFirstPass(
     tone, importCss, fontFamily,
     textChunks[0], slotChunks[0], slotIds,
-    0
+    0, resolvedAlign
   );
 
   if (slotChunks.length === 1) {

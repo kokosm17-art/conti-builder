@@ -5,10 +5,11 @@ import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { doc, getDoc, updateDoc, setDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { ensureShareId, reactivateSession, saveHtmlDesignEdit } from "@/lib/session";
+import { ensureShareId, reactivateSession, saveHtmlDesignEdit, saveHtmlDesignQuickEdit } from "@/lib/session";
+import { getAlignFromHtml, toggleAlignInHtml } from "@/lib/align-utils";
 import { useReviewGate } from "@/lib/use-review-gate";
 import { ReviewModal } from "@/components/review-modal";
-import { ArrowLeft, RefreshCw, Download, Link2, Pencil, Image as ImageIcon, X } from "lucide-react";
+import { ArrowLeft, RefreshCw, Download, Link2, Pencil, Image as ImageIcon, X, AlignLeft, AlignCenter } from "lucide-react";
 
 const GREY_GIF = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
@@ -504,6 +505,20 @@ export default function PreviewHtmlPage() {
     }
   }
 
+  // ── 정렬 즉시 전환 (AI 호출 없음, 재생성/수정 횟수 소모 없음) ──────────────────
+
+  async function handleToggleAlign() {
+    const newFullHtml = toggleAlignInHtml(fullHtml);
+    const newAlign = getAlignFromHtml(newFullHtml);
+    setFullHtml(newFullHtml);
+    setIframeKey((k) => k + 1);
+    try {
+      await saveHtmlDesignQuickEdit(sessionId, newFullHtml, newAlign);
+    } catch {
+      alert("정렬 저장 중 오류가 발생했습니다.");
+    }
+  }
+
   async function handleShareCopy() {
     try {
       const shareId = await ensureShareId(sessionId);
@@ -600,6 +615,18 @@ export default function PreviewHtmlPage() {
           </span>
 
           <div className="flex-1" />
+
+          <button
+            onClick={handleToggleAlign}
+            className="shrink-0 flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200 hover:bg-gray-50 text-gray-700 transition-colors"
+          >
+            {getAlignFromHtml(fullHtml) === "center"
+              ? <AlignLeft className="w-3 h-3" />
+              : <AlignCenter className="w-3 h-3" />}
+            <span className="hidden sm:inline">
+              {getAlignFromHtml(fullHtml) === "center" ? "좌측 정렬로" : "중앙 정렬로"}
+            </span>
+          </button>
 
           <button
             onClick={handleFullRegen}
