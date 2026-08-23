@@ -23,6 +23,15 @@ import { ContiSectionBlock } from "@/components/conti-section-block";
 import { useReviewGate } from "@/lib/use-review-gate";
 import { ReviewModal } from "@/components/review-modal";
 
+const CONTI_STEPS = [
+  "요청 내용 분석 중...",
+  "도입부 작성 중...",
+  "본론부 작성 중...",
+  "결론부 작성 중...",
+  "이미지 슬롯 배치 검토 중...",
+  "마무리 중...",
+];
+
 // ─────────────────────────────────────────────
 // 단계별 폼 데이터 기본값
 // ─────────────────────────────────────────────
@@ -189,6 +198,7 @@ export default function GeneratePage() {
   });
   const [generating, setGenerating] = useState(false);
   const [rawOutput, setRawOutput] = useState("");
+  const [stepIndex, setStepIndex] = useState(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [showPayment, setShowPayment] = useState(false);
   const [sessionInfo, setSessionInfo] = useState<{ productName: string; generationCount: number } | null>(null);
@@ -357,8 +367,15 @@ export default function GeneratePage() {
   async function runGeneration(sid: string) {
     setGenerating(true);
     setRawOutput("");
+    setStepIndex(0);
     setStep(10); // 결과 단계
     let full = ""; // catch에서도 접근해 부분 결과를 보존하기 위해 try 밖에 선언
+
+    // 실제 생성은 검증·보정까지 끝난 뒤 한 번에 도착하므로(스트리밍 아님),
+    // 대기 중에도 진행 상황을 보여주기 위한 단계 애니메이션.
+    const interval = setInterval(() => {
+      setStepIndex((prev) => Math.min(prev + 1, CONTI_STEPS.length - 1));
+    }, 2500);
 
     try {
       const res = await fetch("/api/generate", {
@@ -392,6 +409,7 @@ export default function GeneratePage() {
       if (full) saveContiDraft(sid, full).catch(() => {});
       console.error(err);
     } finally {
+      clearInterval(interval);
       setGenerating(false);
     }
   }
@@ -681,10 +699,38 @@ export default function GeneratePage() {
                     changeInfo={changedSections.get("conclusion")} />
                 </div>
               </>
+            ) : generating && !rawOutput ? (
+              <div className="flex flex-col items-center justify-center py-24">
+                <div className="relative w-16 h-16 mb-6">
+                  <div className="absolute inset-0 border-4 border-blue-100 rounded-full" />
+                  <div className="absolute inset-0 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+                <p className="font-black text-gray-900 mb-1">콘티를 생성하고 있어요</p>
+                <p className="text-sm text-gray-500 mb-6">잠시만 기다려 주세요.</p>
+                <div className="space-y-2">
+                  {CONTI_STEPS.map((step, i) => (
+                    <div
+                      key={i}
+                      className={`flex items-center gap-3 text-sm transition-all duration-500 ${
+                        i < stepIndex
+                          ? "text-blue-600 font-semibold"
+                          : i === stepIndex
+                          ? "text-gray-900 font-semibold"
+                          : "text-gray-300"
+                      }`}
+                    >
+                      <span className="w-5 text-center">
+                        {i < stepIndex ? "✓" : i === stepIndex ? "→" : "○"}
+                      </span>
+                      {step}
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : (
               <div className="bg-white rounded-2xl border border-gray-200 p-6">
                 <pre className="text-sm text-gray-800 whitespace-pre-wrap leading-loose font-[family-name:var(--font-noto)]">
-                  {rawOutput || "콘티를 생성하고 있습니다..."}
+                  {rawOutput}
                 </pre>
               </div>
             )}

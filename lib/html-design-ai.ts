@@ -169,6 +169,7 @@ SHARED CSS CLASS VOCABULARY (use these names consistently — second-pass sectio
 
 CLOSING BOILERPLATE SECTIONS (spec table / FAQ / maker intro): the conclusion of a conti usually contains these recognizable content blocks. Detect them by meaning, not exact wording, and ALWAYS use the matching structure below instead of generic <p> tags — these are NOT narrative copy and must never use .s-card-title or the big narrative font size.
 .s-spec        product spec table — use when CONTENT has a heading about product specs/sizing/certification info (e.g. "스펙", "사양", "제품 정보"). Structure: <div class="s-spec"> wrapping one <div class="s-spec-row"><span class="s-spec-label">라벨</span><span class="s-spec-value">값</span></div> per line. Put the whole thing inside a .s-card with a .s-card-title heading above it.
+.s-info-center shipping/customer-service info block — use when CONTENT has a heading about delivery/shipping or customer service (e.g. "배송 안내", "고객센터", "배송/문의 안내"). Same label/value structure as .s-spec (.s-spec-row/.s-spec-label/.s-spec-value rows, inside a .s-card with a .s-card-title heading), but wrap the whole card in an outer <div class="s-info-center">. This class forces center text-alignment for this block ONLY, on every tone, regardless of the page's global left/center alignment setting — do not remove or override it.
 .s-faq-item    one FAQ question+answer pair — use when CONTENT has a heading about frequently asked questions (e.g. "FAQ", "자주 묻는 질문"). For each Q/A pair: <div class="s-faq-item"><p class="s-faq-q">질문</p><p class="s-faq-a">답변</p></div>. Put all pairs inside one .s-card with a .s-card-title heading ("FAQ") above them — do NOT give the question or answer any other class/size override.
 .s-maker-photo / .s-maker-title / .s-maker-text / .s-why / .s-why-title / .s-why-text   메이커 소개 + Why 와디즈 — use when CONTENT introduces the maker/brand and/or explains why the campaign is on Wadiz (headings like "메이커 소개", "왜 와디즈인가요", "Why 와디즈"). Treat these as ONE combined section: photo <img class="s-maker-photo slot" data-slot="..." ...>, maker heading <p class="s-maker-title">, intro copy as plain <p> (or <p class="s-maker-text"> if the tone defines it), then the Why-와디즈 portion wrapped in <div class="s-why"><p class="s-why-title">Why 와디즈</p><p class="s-why-text">...</p></div> nested inside the same section.
 ⚠ FIXED SIZE, EXEMPT FROM "SHRINK LONG LINES" RULE: .s-spec-label/.s-spec-value/.s-faq-q/.s-faq-a/.s-maker-title/.s-maker-text/.s-why-title/.s-why-text already have a fixed, pre-tuned font-size in <style> — exactly like .s-point-label/.s-card-title. They are NOT narrative copy, so the LINE BREAKS rule's "shrink font-size so a long line fits one row, floor 35px" does NOT apply to them: never add inline style="", never add a custom CSS rule (clamp() or otherwise, including a section-id-scoped selector like "#section-N .s-faq-a") that changes their font-size, and never combine them with .s-card-title. If a value/answer/text line is long, simply let it wrap onto multiple lines at its already-defined (smaller) size — do not shrink it and do not force it onto one row.
@@ -536,7 +537,7 @@ strong {
   } else { // minimal
     typographyCss = `
 section p {
-  font-size: clamp(18px, 3.5vw, 26px);
+  font-size: clamp(32px, 4.5vw, 36px);
   font-weight: 500;
   line-height: 1.5;
   letter-spacing: -0.01em;
@@ -807,6 +808,15 @@ section p.small, section p.desc, section p.label, section p.s-small {
   border-radius: 3px;
 }
 
+/* 배송 안내 / 고객센터 안내 — 톤/정렬 설정과 무관하게 항상 중앙 정렬 */
+.s-info-center {
+  text-align: center !important;
+}
+.s-info-center .s-spec-row {
+  justify-content: center;
+  gap: 12px;
+}
+
 /* FAQ (shared structure across all tones — colors still follow the active tone's vars) */
 .s-faq-item {
   padding: 24px 0;
@@ -833,6 +843,32 @@ section p.small, section p.desc, section p.label, section p.s-small {
 .anim-zoom {
   animation: zoomIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+
+${tone.id === "minimal" ? `
+/* Minimal 톤 전용 오버라이드 (레퍼런스: 신일 무선 BLDC팬 실측 기반) —
+   카드 틀과 다열 그리드를 없애 세로 스택으로 통일.
+   (히어로는 .s-hero를 아예 안 쓰도록 프롬프트에서 지시하므로 여기선 건드리지 않음 —
+   .s-hero-img는 preview-html 편집화면에서 .ci-wrap.ci-hero로 감싸져 position:absolute!important가
+   강제되기 때문에, .s-hero 쪽 CSS만 고쳐선 그 래퍼와 겹쳐버리는 문제가 있었음) */
+section {
+  /* 기본 80px(위+아래 합 160px)는 다른 톤 기준값 — 레퍼런스 실측(한 케이스 사진 끝~다음 케이스 제목
+     시작까지 약 48px)에 맞춰 미니멀 톤만 24px(합 48px)로 줄임. 문장-사진 간 간격(24px)과도 통일. */
+  padding: 24px 24px;
+}
+.s-card {
+  background: none;
+  border: none;
+  border-radius: 0;
+  border-top: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  padding: 32px 0;
+}
+.s-card:hover {
+  transform: none;
+}
+.s-grid {
+  grid-template-columns: 1fr;
+}
+` : ""}
   `.trim();
 }
 
@@ -845,6 +881,14 @@ Font: ${fontFamily}
 ${tone.id === "stimulus" ? `
 DARK/LIGHT SECTION SWITCH (STRICT, this tone only): This tone alternates between the default light section (no extra class) and a dark section (add class="s-dark" to that <section>, nothing else changes). Use "s-dark" ONLY for: the opening hook line(s) of the intro, absolute/impact declaration statements ("죽기 전에 꼭...", "숨만 쉬어도..." style lines), numeric comparison callouts (e.g. "OO배 차이"), and urgency/scarcity copy (limited time, limited quantity, last chance). Use the default light section for everything else — general storytelling, explanation, product photography, FAQ, maker intro. Most sections in a typical conti should stay light; dark sections are a deliberate accent used sparingly, not a strict alternation pattern. Keep dark sections mostly text/number-driven (hero-style) — avoid .s-card/.s-grid layouts inside a .s-dark section.
 KEY PHRASE HIGHLIGHT: Wrap the single most important word or short phrase per major copy block in <span class="s-highlight">...</span> (see class vocabulary) — sparingly, not every line.
+` : ""}
+${tone.id === "minimal" ? `
+BODY SECTION RHYTHM (this tone only, reference-based — see .s-card/.s-grid overrides above):
+- HERO: do NOT use .s-hero/.s-hero-img/.s-hero-text for the opening at all (this tone's reference has no dark-overlay hero). Write the opening as a plain section: the headline as an ordinary <p> (or h1/h2/h3), immediately followed by a normal image slot in the SAME section (plain <img class="slot" data-slot="...">, no special class) — text first, image right below it, full width, no overlay, no absolute positioning.
+- Before a Point/step subheading (.s-point-label), add one small caption line just above it — a short label like "CHECK 01" or "포인트 01", plain <p class="small">, NOT part of the .s-point-label itself.
+- At true chapter/step boundaries (not between every sentence), instead of a thin i-divider, insert a plain full-width <section> with no visible text and a subtle tinted background (class="s-alt", nothing else) as the transition band.
+- For emphasis inside body copy, prefer wrapping the key phrase in <span class="s-highlight"> (solid fill, not the default translucent accent tint) over coloring it — this tone avoids the bold poster-style bright-accent-text used by other tones.
+- Do NOT use .s-grid/.s-card for USP/feature lists in this tone — lay them out as a plain vertical stack of sections instead (image, then plain <p> text, repeated), matching the reference's full-width single-column rhythm.
 ` : ""}
 
 CRITICAL: ALL CSS in one <style> block. NEVER use style="" attributes.

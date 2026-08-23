@@ -261,7 +261,9 @@ export default function MyPage() {
                   {text ? (
                     <p className="text-sm text-gray-500 leading-relaxed mb-3">{text}</p>
                   ) : (
-                    <p className="text-sm text-gray-300 italic mb-3">아직 생성된 콘티가 없습니다.</p>
+                    <p className="text-sm text-gray-300 italic mb-3">
+                      {stage === STAGE.writing ? "콘티를 생성하고 있습니다." : "아직 생성된 콘티가 없습니다."}
+                    </p>
                   )}
 
                   <div className="flex items-center gap-2">

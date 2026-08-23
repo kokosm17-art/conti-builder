@@ -2,6 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest } from "next/server";
 import { getSystemPrompt, buildUserPrompt, SYSTEM_PROMPT_REVISION } from "@/lib/system-prompt";
 import { FormData } from "@/lib/types";
+import { parseSections } from "@/lib/format-output";
+import { verifyAndFixContiSlots } from "@/lib/conti-validate";
 import fs from "fs";
 import path from "path";
 
@@ -91,14 +93,24 @@ export async function POST(req: NextRequest) {
             messages: [{ role: "user", content: userMessage }],
           });
 
+          // 생성되는 대로 바로 내보내지 않고 전체를 모아둔다 — 이미지 슬롯 규칙
+          // 위반 여부를 검증하고 필요하면 자동 보정한 "최종본"만 사용자에게 보여준다.
+          let full = "";
           for await (const chunk of response) {
             if (
               chunk.type === "content_block_delta" &&
               chunk.delta.type === "text_delta"
             ) {
-              controller.enqueue(encoder.encode(chunk.delta.text));
+              full += chunk.delta.text;
             }
           }
+
+          // 수정 요청(리비전)은 이미 특정 지시에 맞춘 작은 변경이라 검증 대상에서 제외.
+          const finalText = isRevision
+            ? full
+            : await verifyAndFixContiSlots(client, full, parseSections);
+
+          controller.enqueue(encoder.encode(finalText));
         } catch (err) {
           const msg = err instanceof Error ? err.message : "생성 오류";
           controller.enqueue(encoder.encode(`\n\n[오류: ${msg}]`));

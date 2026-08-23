@@ -20,6 +20,15 @@ import { FormData } from "@/lib/types";
 
 const MAX_GENERATION_COUNT = 30;
 
+const CONTI_STEPS = [
+  "요청 내용 분석 중...",
+  "도입부 작성 중...",
+  "본론부 작성 중...",
+  "결론부 작성 중...",
+  "이미지 슬롯 배치 검토 중...",
+  "마무리 중...",
+];
+
 export default function ContiViewPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -33,6 +42,7 @@ export default function ContiViewPage() {
   const [designExists, setDesignExists] = useState(false);
   const [htmlDesignExists, setHtmlDesignExists] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [stepIndex, setStepIndex] = useState(0);
   const [chatInput, setChatInput] = useState("");
   const [generating, setGenerating] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -89,7 +99,14 @@ export default function ContiViewPage() {
     setRegenerating(true);
     setChangedSections(new Map());
     setContiText("");
+    setStepIndex(0);
     let full = "";
+
+    // 실제 생성은 검증·보정까지 끝난 뒤 한 번에 도착하므로(스트리밍 아님),
+    // 대기 중에도 진행 상황을 보여주기 위한 단계 애니메이션.
+    const interval = setInterval(() => {
+      setStepIndex((prev) => Math.min(prev + 1, CONTI_STEPS.length - 1));
+    }, 2500);
 
     try {
       await reactivateSession(user!.uid, sessionId);
@@ -120,6 +137,7 @@ export default function ContiViewPage() {
       console.error(err);
       alert("재생성 중 문제가 발생했습니다. 다시 시도해 주세요.");
     } finally {
+      clearInterval(interval);
       setRegenerating(false);
     }
   }
@@ -278,7 +296,37 @@ export default function ContiViewPage() {
         <h1 className="text-xl font-black text-gray-900 mb-6">{productName || "(제품명 미정)"} — 콘티</h1>
 
         {!contiText ? (
-          <div className="text-center py-24 text-gray-400">아직 생성된 콘티가 없어요.</div>
+          regenerating ? (
+            <div className="flex flex-col items-center justify-center py-24">
+              <div className="relative w-16 h-16 mb-6">
+                <div className="absolute inset-0 border-4 border-blue-100 rounded-full" />
+                <div className="absolute inset-0 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              </div>
+              <p className="font-black text-gray-900 mb-1">콘티를 생성하고 있어요</p>
+              <p className="text-sm text-gray-500 mb-6">잠시만 기다려 주세요.</p>
+              <div className="space-y-2">
+                {CONTI_STEPS.map((step, i) => (
+                  <div
+                    key={i}
+                    className={`flex items-center gap-3 text-sm transition-all duration-500 ${
+                      i < stepIndex
+                        ? "text-blue-600 font-semibold"
+                        : i === stepIndex
+                        ? "text-gray-900 font-semibold"
+                        : "text-gray-300"
+                    }`}
+                  >
+                    <span className="w-5 text-center">
+                      {i < stepIndex ? "✓" : i === stepIndex ? "→" : "○"}
+                    </span>
+                    {step}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-24 text-gray-400">아직 생성된 콘티가 없어요.</div>
+          )
         ) : (
           <>
             {parsed && (parsed.projectTitles.length > 0 || parsed.coreCopies.length > 0) && (
